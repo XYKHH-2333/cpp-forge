@@ -316,7 +316,46 @@
       strokePath(pts, f.color);
     }
 
+    drawEvalPoints(C);      // "输入 x 求 y" 的标记点
     drawMarker();
+  }
+
+  // 每个函数"输入 x 求 y"后在图上的标记点 + 坐标标签
+  function drawEvalPoints(C) {
+    var step = niceStep(86 / state.view.ppu);
+    for (var i = 0; i < state.funcs.length; i++) {
+      var f = state.funcs[i];
+      if (!f.visible || f.error || !f.fn || f.mode !== 'y') continue;
+      if (f.evalX === null || f.evalX === undefined) continue;
+      if (f.evalY === null || f.evalY === undefined || !isFinite(f.evalY)) continue;
+      var sx = toScreenX(f.evalX), sy = toScreenY(f.evalY);
+      if (sx < -200 || sx > W + 200 || sy < -200 || sy > H + 200) continue;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+      ctx.fillStyle = f.color;
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = C.bg;
+      ctx.stroke();
+
+      var txt = '(' + fmt(f.evalX, step * 0.01) + ', ' + fmt(f.evalY, step * 0.01) + ')';
+      ctx.font = '600 11px ui-monospace,SFMono-Regular,Menlo,monospace';
+      var tw = ctx.measureText(txt).width;
+      var lx = sx + 10, ly = sy - 12;
+      if (lx + tw > W - 4) lx = sx - tw - 10;
+      if (ly < 10) ly = sy + 18;
+      ctx.globalAlpha = 0.88;
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(lx - 3, ly - 13, tw + 6, 16);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = f.color;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, lx, ly - 5);
+      ctx.restore();
+    }
   }
 
   // 标记点单独画在叠加层：曲线不动时只重画这一层，手指拖动才跟手
@@ -788,7 +827,41 @@
         renderList(); draw(); save();
       });
 
-      row.appendChild(dot); row.appendChild(mode); row.appendChild(input); row.appendChild(del);
+      // 解析式右边：输入 x → 立刻给出 y，并在图上标出这个点
+      var xin = document.createElement('input');
+      xin.className = 'xv';
+      xin.type = 'number';
+      xin.step = 'any';
+      xin.placeholder = 'x';
+      if (f.evalX !== null && f.evalX !== undefined) xin.value = f.evalX;
+      var ylab = document.createElement('span');
+      ylab.className = 'yv';
+      function refreshY() {
+        if (f.evalX === null || f.evalX === undefined || !f.fn || f.mode !== 'y') {
+          f.evalY = null;
+          ylab.textContent = 'y=—';
+          return;
+        }
+        try {
+          var v = f.fn(f.evalX, 0, 0);
+          f.evalY = isFinite(v) ? v : null;
+          ylab.textContent = 'y=' + (f.evalY === null ? '—' : fmt(f.evalY, 0.001));
+        } catch (e) {
+          f.evalY = null;
+          ylab.textContent = 'y=—';
+        }
+      }
+      xin.addEventListener('input', function () {
+        var v = parseFloat(xin.value);
+        if (isNaN(v) || f.mode !== 'y') { f.evalX = null; f.evalY = null; }
+        else { f.evalX = v; }
+        refreshY();
+        draw(); save();
+      });
+      refreshY();
+      row.appendChild(dot); row.appendChild(mode); row.appendChild(input);
+      row.appendChild(xin); row.appendChild(ylab);
+      row.appendChild(del);
       var err = document.createElement('div');
       err.className = 'errmsg';
       err.textContent = f.error || '';
