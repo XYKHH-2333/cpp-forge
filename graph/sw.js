@@ -1,5 +1,5 @@
 /* 函数绘图器 Service Worker：缓存外壳，装到桌面后离线也能用（绘图本来就不需要网络）。 */
-const CACHE = 'graph-forge-v2';
+const CACHE = 'graph-forge-v3';
 const ASSETS = ['./', './index.html', './parser.js', './app.js',
                 './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
