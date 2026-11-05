@@ -672,14 +672,17 @@
     var text = isLocal
       ? 'C++ 代码生成器：输入需求直接生成可编译的 C++ 代码。我这个是本地地址（别人打不开），要给别人用得导出安装包或传到静态托管。'
       : 'C++ 代码生成器：输入需求直接生成可编译的 C++ 代码，可以装到桌面当 App 用。';
+    // 把链接**写进正文**，不依赖 share 的 url 字段：
+    // 微信/QQ 等 App 有时会丢掉 url 字段，只留正文里的文字，结果对方点开是半截链接。
+    var body = text + (isLocal ? '' : '\n' + url);
     try{
       if(navigator.share){
-        await navigator.share({title:'C++ 代码生成器', text:text, url:url});
+        await navigator.share({title:'C++ 代码生成器', text:body});
         return;
       }
     }catch(e){ if(e && e.name==='AbortError') return; }
     try{
-      await navigator.clipboard.writeText(isLocal ? text : (text+'\n'+url));
+      await navigator.clipboard.writeText(body);
       toast(isLocal ? '本地地址别人打不开，已复制说明文字' : '链接已复制');
     }catch(e){ toast('分享失败：浏览器不支持', true); }
   });
