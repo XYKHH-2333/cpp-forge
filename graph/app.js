@@ -363,7 +363,7 @@
   // 显式 y=f(x)：按屏幕列采样
   function sampleExplicit(f) {
     var segs = [], cur = [], prevSy = null, limit = H * 3;
-    var stepX = Math.max(1, Math.round(W / 900));
+    var stepX = 1;      // 每一列都采样：点哪就是哪，不会因为采样间隔跳一格
     for (var sx = 0; sx <= W; sx += stepX) {
       var wx = toWorldX(sx);
       var wy;
@@ -624,15 +624,30 @@
 
   // 点击取点：找最近的曲线点
   function pick(sx, sy) {
-    var best = null, bestD = 34 * 34;
+    var best = null, bestD = 22 * 22;      // 命中半径缩小：不再"老远就吸过去"
     for (var i = 0; i < lastPaths.length; i++) {
       var item = lastPaths[i];
-      for (var s = 0; s < item.pts.length; s++) {
-        var seg = item.pts[s];
-        for (var k = 0; k < seg.length; k++) {
-          var dx = seg[k].sx - sx, dy = seg[k].sy - sy;
-          var d = dx * dx + dy * dy;
-          if (d < bestD) { bestD = d; best = { p: seg[k], f: item.f }; }
+      var f = item.f;
+      // 显式函数 y=f(x)：直接用手指的横坐标算，精度到 1 像素
+      if (f.mode === 'y' && f.fn) {
+        var wx0 = toWorldX(sx), wy0;
+        try { wy0 = f.fn(wx0, 0, 0); } catch (e) { wy0 = NaN; }
+        if (isFinite(wy0)) {
+          var sy0 = toScreenY(wy0);
+          var dd = (sx - sx) * (sx - sx) + (sy0 - sy) * (sy0 - sy);
+          if (dd < bestD && sy0 > -H && sy0 < H * 2) {
+            bestD = dd;
+            best = { p: { wx: wx0, wy: wy0, sx: sx, sy: sy0 }, f: f };
+          }
+        }
+      }
+      // 其余类型（隐函数/极坐标/参数）仍按采样点找最近的
+      for (var s2 = 0; s2 < item.pts.length; s2++) {
+        var seg2 = item.pts[s2];
+        for (var k2 = 0; k2 < seg2.length; k2++) {
+          var dx2 = seg2[k2].sx - sx, dy2 = seg2[k2].sy - sy;
+          var d2 = dx2 * dx2 + dy2 * dy2;
+          if (d2 < bestD) { bestD = d2; best = { p: seg2[k2], f: item.f }; }
         }
       }
     }
