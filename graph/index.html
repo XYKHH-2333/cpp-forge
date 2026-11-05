@@ -32,10 +32,15 @@
   #app{display:flex;flex-direction:column;height:100dvh}
   #stage{position:relative;flex:1;min-height:0}
   canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+  @supports (padding: env(safe-area-inset-top)){
+    #stage{padding-top:env(safe-area-inset-top)}
+  }
 
   /* 右上角工具按钮 */
   #tools{
-    position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:8px;z-index:5;
+    position:absolute;right:10px;
+    bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    display:flex;flex-direction:column;gap:7px;z-index:5;
   }
   #tools button{
     width:42px;height:42px;border-radius:12px;border:1px solid var(--line);
@@ -57,54 +62,78 @@
   /* 底部函数面板 */
   #panel{
     background:var(--panel);border-top:1px solid var(--line);
-    max-height:46vh;display:flex;flex-direction:column;transition:max-height .2s;
+    max-height:52vh;display:flex;flex-direction:column;
+    box-shadow:0 -6px 24px #0002;
   }
-  #panel.collapsed{max-height:44px}
-  #panel.collapsed #list,#panel.collapsed .samples-wrap{display:none}
+  #panel.collapsed{max-height:48px}
+  #panel.collapsed #list,#panel.collapsed #sampleBox{display:none}
   #phead{
-    display:flex;align-items:center;gap:8px;padding:8px 12px;min-height:44px;
-    border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:8px;padding:9px 12px;min-height:48px;
+    border-bottom:1px solid var(--line);flex:0 0 auto;
   }
-  #phead .t{font-size:13px;font-weight:600}
+  #phead .t{font-size:13.5px;font-weight:600;letter-spacing:.2px}
+  #phead .badge{
+    font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;
+    padding:1px 7px;line-height:15px;
+  }
   #phead .grow{flex:1}
   .btn{
     border:1px solid var(--line);background:var(--panel2);color:var(--fg);
-    padding:6px 11px;border-radius:9px;font-size:12.5px;cursor:pointer;font-family:inherit;
+    padding:7px 12px;border-radius:10px;font-size:12.5px;cursor:pointer;font-family:inherit;
+    transition:.15s;
   }
   .btn:hover{border-color:var(--accent);color:var(--accent)}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.08);color:#fff}
 
-  #list{overflow:auto;padding:6px 10px}
+  #list{overflow:auto;padding:4px 10px;flex:0 1 auto}
   .frow{
-    display:flex;align-items:center;gap:6px;padding:5px 4px;flex-wrap:wrap;
+    display:flex;align-items:center;gap:7px;padding:7px 2px;flex-wrap:wrap;
     border-bottom:1px solid var(--line);
   }
-  .frow.off{opacity:.45}
-  .frow.err .fx{border-color:var(--err)}
-  .dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);cursor:pointer;flex:0 0 auto}
+  .frow:last-child{border-bottom:none}
+  .frow.off{opacity:.4}
+  .frow.err .fx{border-color:var(--err);background:color-mix(in srgb, var(--err) 8%, var(--panel2))}
+  .dot{
+    width:22px;height:22px;border-radius:50%;border:2px solid var(--line);
+    cursor:pointer;flex:0 0 auto;transition:.15s;
+  }
+  .dot:hover{transform:scale(1.12)}
   .mode{
-    background:var(--panel2);color:var(--fg);border:1px solid var(--line);
-    border-radius:8px;padding:5px 4px;font-size:12px;flex:0 0 auto;
+    background:var(--panel2);color:var(--dim);border:1px solid var(--line);
+    border-radius:8px;padding:6px 3px;font-size:11.5px;flex:0 0 auto;
   }
   .fx{
-    flex:1;min-width:120px;background:var(--panel2);border:1px solid var(--line);
-    color:var(--fg);border-radius:8px;padding:7px 10px;
-    font:13px/1.4 ui-monospace,Menlo,monospace;outline:none;
+    flex:1;min-width:130px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--fg);border-radius:9px;padding:8px 10px;
+    font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;
   }
-  .fx:focus{border-color:var(--accent)}
+  .fx:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent)}
   .del{
-    width:28px;height:28px;border-radius:8px;border:1px solid var(--line);
-    background:transparent;color:var(--dim);cursor:pointer;font-size:15px;flex:0 0 auto;
+    width:30px;height:30px;border-radius:9px;border:1px solid var(--line);
+    background:transparent;color:var(--dim);cursor:pointer;font-size:16px;flex:0 0 auto;
   }
   .del:hover{color:var(--err);border-color:var(--err)}
-  .errmsg{width:100%;font-size:11.5px;color:var(--err);padding-left:30px}
+  .errmsg{width:100%;font-size:11.5px;color:var(--err);padding-left:32px;margin-top:-2px}
   .errmsg:empty{display:none}
 
-  .samples-wrap{padding:8px 12px 12px;border-top:1px solid var(--line);overflow:auto}
-  .samples-wrap h4{margin:0 0 8px;font-size:12px;color:var(--dim);font-weight:500}
-  #samples{display:flex;flex-wrap:wrap;gap:6px}
+  /* 示例库：默认收起 */
+  details#sampleBox{flex:0 0 auto;border-top:1px solid var(--line);background:var(--panel)}
+  details#sampleBox > summary{
+    display:flex;align-items:center;gap:7px;padding:10px 12px;
+    font-size:12.5px;color:var(--dim);cursor:pointer;user-select:none;
+  }
+  details#sampleBox > summary::before{content:"▸";font-size:10px;transition:.15s}
+  details#sampleBox[open] > summary::before{transform:rotate(90deg)}
+  details#sampleBox[open] > summary{color:var(--fg);border-bottom:1px solid var(--line)}
+  details#sampleBox .cnt{
+    font-size:11px;color:var(--dim);border:1px solid var(--line);
+    border-radius:999px;padding:0 6px;line-height:16px;
+  }
+  details#sampleBox .hint{margin-left:auto;font-size:11px;color:var(--dim);opacity:.8}
+  #samples{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px 14px;max-height:30vh;overflow:auto}
   .smp{
-    font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);
+    font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);
     background:var(--panel2);color:var(--dim);cursor:pointer;font-family:inherit;
   }
   .smp:hover{border-color:var(--accent);color:var(--accent)}
@@ -136,15 +165,16 @@
   <div id="panel">
     <div id="phead">
       <span class="t">函数</span>
+      <span class="badge" id="fnCount">0</span>
       <span class="grow"></span>
       <button class="btn" id="togglePanel">收起/展开</button>
       <button class="btn primary" id="addfn">＋ 添加</button>
     </div>
     <div id="list"></div>
-    <div class="samples-wrap">
-      <h4>示例（点击添加）：幂函数 / 指数 / 对数 / 三角 / 反三角 / 双曲 / 隐函数 / 极坐标 / 参数曲线</h4>
+    <details id="sampleBox">
+      <summary>示例库<span class="cnt" id="sampleCnt">33</span><span class="hint">点击即添加</span></summary>
       <div id="samples"></div>
-    </div>
+    </details>
   </div>
 </div>
 
