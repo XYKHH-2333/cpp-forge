@@ -117,7 +117,8 @@
   .editor{position:relative;flex:1;background:var(--code-bg);min-height:240px}
   .editor > pre, .editor > textarea{
     position:absolute;inset:0;margin:0;padding:14px 16px;border:0;
-    font:13.5px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-size:var(--code-fs,13.5px);line-height:1.7;
     tab-size:2;white-space:pre;overflow:auto;box-sizing:border-box;
   }
   .editor > pre{color:var(--fg);pointer-events:none}
@@ -130,6 +131,17 @@
   .editor.readonly > textarea{caret-color:transparent}
   .badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
   .badge.live{border-color:var(--ok);color:var(--ok)}
+  /* 全屏阅读/编辑：把右侧面板铺满整个视口 */
+  body.fs #left, body.fs header, body.fs #tabs, body.fs details#explainBox{display:none !important}
+  body.fs #right{position:fixed;inset:0;z-index:200;height:auto !important;min-height:0 !important}
+  body.fs #panes{height:100%}
+  body.fs .editor{min-height:0 !important}
+  body.fs #fsBar{display:flex !important}
+  #fsBar{
+    display:none;position:fixed;right:12px;
+    bottom:calc(16px + env(safe-area-inset-bottom,0px));gap:8px;z-index:210;
+  }
+  #fsBar .btn{box-shadow:0 6px 20px #0006;background:var(--panel)}
   details#explainBox{border-bottom:1px solid var(--line);background:var(--panel)}
   details#explainBox > summary{
     padding:9px 16px;font-size:12.5px;color:var(--dim);cursor:pointer;user-select:none;
@@ -240,6 +252,9 @@
           <span id="filename" style="font-size:12.5px;color:var(--dim)">main.cpp</span>
           <span class="badge" id="editState">空</span>
           <span class="grow"></span>
+          <button class="btn" id="btnZoomOut" title="缩小字号">A−</button>
+          <button class="btn" id="btnZoomIn" title="放大字号">A+</button>
+          <button class="btn" id="btnFull" title="占满屏幕">⤢ 全屏</button>
           <button class="btn" id="btnCopy">复制</button>
           <button class="btn" id="btnDownload">下载</button>
           <button class="btn" id="btnSaveHist">存历史</button>
@@ -251,6 +266,11 @@
           <textarea id="ed" spellcheck="false" autocapitalize="off" autocomplete="off"
                     autocorrect="off" placeholder="生成的代码会出现在这里，也可以直接在这里手写"></textarea>
         </div>
+      </div>
+      <div id="fsBar">
+        <button class="btn" id="btnZoomOut2">A−</button>
+        <button class="btn" id="btnZoomIn2">A+</button>
+        <button class="btn primary" id="btnExitFs">退出全屏</button>
       </div>
       <div class="pane" id="pane-history">
         <div class="body"><div id="history"><div class="empty">还没有历史记录</div></div></div>
@@ -302,7 +322,7 @@
   }
   function saveDB(){ try{ localStorage.setItem(DB_KEY, JSON.stringify(DB)); }catch(e){ toast('保存失败：浏览器存储已满或被禁用', true); } }
   function defaultConfig(){
-    return {base:'https://api.deepseek.com', key:'', model:'deepseek-flash', temp:0.3};
+    return {base:'https://api.deepseek.com', key:'', model:'deepseek-flash', temp:0.3, codeFont:13.5};
   }
   var DB = loadDB();
 
@@ -597,6 +617,49 @@
     if(DB.history.length>200) DB.history.length=200;   // 只留最近 200 条，防止塞爆
     saveDB(); renderHistory(); toast('已存入历史');
   });
+
+  // ── 字号缩放 + 全屏 ──────────────────────────────────────────────
+  var CODE_FS_MIN = 10, CODE_FS_MAX = 30;
+  function applyFont(v){
+    v = Math.max(CODE_FS_MIN, Math.min(CODE_FS_MAX, Math.round(v)));
+    document.documentElement.style.setProperty('--code-fs', v + 'px');
+    DB.config.codeFont = v;
+    saveDB();
+    return v;
+  }
+  function bump(delta){
+    var cur = Number(DB.config.codeFont) || 13.5;
+    applyFont(cur + delta);
+    toast('字号 ' + (Number(DB.config.codeFont)||13.5) + 'px');
+  }
+  ['btnZoomIn','btnZoomIn2'].forEach(function(id){ $(id).addEventListener('click', function(){ bump(1.5); }); });
+  ['btnZoomOut','btnZoomOut2'].forEach(function(id){ $(id).addEventListener('click', function(){ bump(-1.5); }); });
+
+  function isFs(){ return document.body.classList.contains('fs'); }
+  function enterFs(){
+    document.body.classList.add('fs');
+    hlEl.style.fontSize = edEl.style.fontSize = '';   // 走 CSS 变量
+    // 先尝试真正的全屏 API（能连系统状态栏一起隐藏），失败就退回 CSS 铺满
+    var el = $('right');
+    if(el.requestFullscreen){ el.requestFullscreen().catch(function(){}); }
+    paint();
+    toast('已全屏：点右下角「退出全屏」返回');
+  }
+  function exitFs(){
+    document.body.classList.remove('fs');
+    if(document.fullscreenElement && document.exitFullscreen){ document.exitFullscreen().catch(function(){}); }
+    paint();
+  }
+  $('btnFull').addEventListener('click', function(){ isFs() ? exitFs() : enterFs(); });
+  $('btnExitFs').addEventListener('click', exitFs);
+  document.addEventListener('fullscreenchange', function(){
+    // 用户按系统返回键退出全屏时，把 CSS 状态一起收掉
+    if(!document.fullscreenElement && isFs()) exitFs();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && isFs()) exitFs();
+  });
+  if(DB.config.codeFont) applyFont(DB.config.codeFont);
 
   $('btnClear').addEventListener('click', function(){
     if(!edEl.value.trim()) return;
