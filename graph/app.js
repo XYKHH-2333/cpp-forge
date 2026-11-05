@@ -606,12 +606,28 @@
     return best;
   }
 
+  // 靠近整数 x 时做"阻尼吸附"：越接近整数，移动越慢并轻微贴住，
+  // 但不是硬停顿，继续拖还是能拿走。
+  function magnetX(sx) {
+    var wx = toWorldX(sx);
+    var nearest = Math.round(wx);
+    var dxPx = (wx - nearest) * state.view.ppu;      // 离整数还有多少像素
+    var R = 10;                                     // 吸附作用半径（屏幕像素，10px 内才生效）
+    if (Math.abs(dxPx) < R) {
+      var t = Math.abs(dxPx) / R;                   // 0（正好在整数上）→ 1（出圈）
+      // 2 次幂：靠近整数时移动变慢并轻轻贴住，但永远拖得走（不锁死）
+      var eased = Math.sign(dxPx) * R * Math.pow(t, 2.0) / state.view.ppu;
+      return nearest + eased;
+    }
+    return wx;
+  }
+
   // 沿曲线拖动时，用这个函数把手指位置投影到曲线上的点
   function pointOnCurve(item, sx, sy) {
     var f = item.f;
     // 显式函数：直接用横坐标求值，比离散采样更准、更跟手
     if (f.mode === 'y' && f.fn) {
-      var wx = toWorldX(sx), wy;
+      var wx = magnetX(sx), wy;
       try { wy = f.fn(wx, 0, 0); } catch (e) { wy = NaN; }
       if (isFinite(wy)) {
         var syS = toScreenY(wy);
@@ -630,7 +646,7 @@
       var f = item.f;
       // 显式函数 y=f(x)：直接用手指的横坐标算，精度到 1 像素
       if (f.mode === 'y' && f.fn) {
-        var wx0 = toWorldX(sx), wy0;
+        var wx0 = magnetX(sx), wy0;
         try { wy0 = f.fn(wx0, 0, 0); } catch (e) { wy0 = NaN; }
         if (isFinite(wy0)) {
           var sy0 = toScreenY(wy0);
