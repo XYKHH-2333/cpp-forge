@@ -896,6 +896,12 @@
 
   // ── 分享这个 App ─────────────────────────────────────────────────
   $('btnShare').addEventListener('click', async function(){
+    // 装成 APK 时：WebView 里没有 navigator.share，交给原生分享面板
+    if (window.AndroidShare && typeof window.AndroidShare.share === 'function') {
+      var pub = 'https://xykhh-2333.github.io/cpp-forge/';
+      window.AndroidShare.share('C++ 代码生成器：输入需求直接生成可编译的 C++ 代码。\n' + pub);
+      return;
+    }
     var isLocal = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
     var url = location.href.split('#')[0];
     var text = isLocal
