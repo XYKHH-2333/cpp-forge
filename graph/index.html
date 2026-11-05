@@ -32,6 +32,8 @@
   #app{display:flex;flex-direction:column;height:100dvh}
   #stage{position:relative;flex:1;min-height:0}
   canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+  /* 曲线画在 #cv 上（只在视图变化时重绘），标记点画在 #ov 上（跟着手指高频重绘） */
+  #ov{position:absolute;inset:0;pointer-events:none;z-index:2}
   @supports (padding: env(safe-area-inset-top)){
     #stage{padding-top:env(safe-area-inset-top)}
   }
@@ -152,6 +154,7 @@
 <div id="app">
   <div id="stage">
     <canvas id="cv"></canvas>
+    <canvas id="ov"></canvas>
     <div id="tools">
       <button id="zin" title="放大">＋</button>
       <button id="zout" title="缩小">－</button>
