@@ -33,10 +33,16 @@
     -webkit-font-smoothing:antialiased;
   }
   header{
-    display:flex;align-items:center;gap:12px;padding:12px 16px;
+    display:flex;align-items:center;gap:10px;padding:10px 14px;flex-wrap:wrap;
     border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:10;
   }
-  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px;white-space:nowrap;flex-shrink:0}
+  @media (max-width:600px){
+    header{gap:8px;padding:9px 12px}
+    header h1{font-size:15px}
+    header .sub{display:none}
+    header .btn{padding:6px 10px;font-size:12.5px}
+  }
   header .sub{color:var(--dim);font-size:12px}
   header .grow{flex:1}
   .btn{
@@ -703,7 +709,7 @@
       + 'SW 已接管页面：' + (navigator.serviceWorker && navigator.serviceWorker.controller ? '✅ 是' : '❌ 否（刷新一次）') + '<br>'
       + '安装入口：' + (installEvt ? '✅ 可用（点上方按钮）' : '❌ 未出现') + '<br>'
       + '运行模式：' + (standalone ? '独立窗口（已安装）' : '普通标签页') + '<br>'
-      + '浏览器：' + (isInAppBrowser() ? '⚠️ 应用内浏览器（不支持安装）' : '普通浏览器') + '<br>'
+      + '浏览器：' + (isInAppBrowser() ? '⚠️ 应用内浏览器（不支持安装）' : esc(browserName()) + (isChrome() ? ' ✅' : '（非 Chrome，安装入口不会出现）')) + '<br>'
       + '当前地址：' + esc(location.origin);
   }
   window.addEventListener('beforeinstallprompt', function(e){
@@ -715,6 +721,22 @@
   });
   // 3 秒内没等到可安装事件 → 说明当前来源不被 Chrome 认可（多半是自签 HTTPS），
   // 直接把"换哪个地址、点哪里"写给人看，别让人干等着一个永远不出现的按钮。
+  function isChrome(){
+    var ua = navigator.userAgent || '';
+    return /Chrome\/\d+/.test(ua) && !/Edg|OPR|Vivaldi|YaBrowser|Quark|UCBrowser|MiuiBrowser|HuaweiBrowser|vivoBrowser|HeyTapBrowser|MQQBrowser/i.test(ua);
+  }
+  function browserName(){
+    var ua = navigator.userAgent || '';
+    if(/MiuiBrowser/i.test(ua)) return '小米浏览器';
+    if(/HuaweiBrowser/i.test(ua)) return '华为浏览器';
+    if(/vivoBrowser|VivoBrowser/i.test(ua)) return 'vivo 浏览器';
+    if(/HeyTapBrowser|OppoBrowser/i.test(ua)) return 'OPPO/一加浏览器';
+    if(/UCBrowser|Quark/i.test(ua)) return 'UC/夸克';
+    if(/MQQBrowser/i.test(ua)) return 'QQ 浏览器';
+    if(/MicroMessenger/i.test(ua)) return '微信内置浏览器';
+    if(/; wv\)/.test(ua)) return '应用内浏览器';
+    return isChrome() ? 'Chrome' : '其它浏览器';
+  }
   function isInAppBrowser(){
     var ua = navigator.userAgent || '';
     return /; wv\)/.test(ua) || /Version\/\d+.*Mobile Safari/.test(ua) && !/CriOS|Chrome\//.test(ua)
@@ -730,12 +752,19 @@
   $('btnInstall').addEventListener('click', function(){
     if(!installEvt){
       var inApp = isInAppBrowser();
+      var notChrome = !inApp && !isChrome();
       var msg = inApp
         ? '⚠️ 你现在的浏览器是「应用内浏览器」（DSHA 或微信/QQ 之类打开的窗口），<b>它不支持安装网页应用</b>。\n\n'
           + '请复制下面的地址，用手机自带的 <b>Chrome / 浏览器</b> 打开，再安装。\n\n'
-        : '当前浏览器没有触发安装入口。最常见的原因是**这一页是第一次打开**：\n'
-          + '第一次只会注册 Service Worker，安装入口要到**第二次打开**才出现。\n\n'
-          + '请先刷新一次；刷新后还没有，就用浏览器菜单里的「安装应用 / 添加到主屏幕」。\n\n';
+        : (notChrome
+            ? '你现在用的是「' + browserName() + '」。\n\n'
+              + '「安装应用」是 Chrome 的能力，多数国产浏览器不支持，所以按钮不会出现。\n\n'
+              + '想得到真正的独立窗口：装一个 Chrome，用它打开这个地址。\n'
+              + '不想装也行：用本浏览器的菜单「添加到桌面 / 添加到主屏幕」，\n'
+              + '同样会在桌面生成图标（点开是在这个浏览器里打开，功能一样）。\n\n'
+            : '当前浏览器没有触发安装入口。最常见的原因是**这一页是第一次打开**：\n'
+              + '第一次只会注册 Service Worker，安装入口要到**第二次打开**才出现。\n\n'
+              + '请先刷新一次；刷新后还没有，就用浏览器菜单里的「安装应用 / 添加到主屏幕」。\n\n');
       showInstallHelp(msg);
       return;
     }
