@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>函数绘图器</title>
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a21; --panel2:#1c212b; --line:#262c38;
+    --fg:#e6e9ef; --dim:#8b95a7; --accent:#4c8dff; --ok:#3ddc97; --err:#ff6b6b;
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --line:#e2e5ea;
+      --fg:#1b1f27; --dim:#6b7280; --accent:#2563eb; --ok:#0a8f5b; --err:#dc2626;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{
+    background:var(--bg);color:var(--fg);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none;
+  }
+  #app{display:flex;flex-direction:column;height:100dvh}
+  #stage{position:relative;flex:1;min-height:0}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+
+  /* 右上角工具按钮 */
+  #tools{
+    position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:8px;z-index:5;
+  }
+  #tools button{
+    width:42px;height:42px;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel);color:var(--fg);font-size:16px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 14px #0003;
+  }
+  #tools button.on{border-color:var(--accent);color:var(--accent)}
+  #tools button.small{font-size:11px}
+
+  /* 坐标提示 */
+  #tip{
+    position:absolute;display:none;z-index:8;pointer-events:none;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:7px 11px;font:12.5px/1.5 ui-monospace,Menlo,monospace;
+    white-space:pre;box-shadow:0 6px 20px #0004;color:var(--fg);
+  }
+
+  /* 底部函数面板 */
+  #panel{
+    background:var(--panel);border-top:1px solid var(--line);
+    max-height:46vh;display:flex;flex-direction:column;transition:max-height .2s;
+  }
+  #panel.collapsed{max-height:44px}
+  #panel.collapsed #list,#panel.collapsed .samples-wrap{display:none}
+  #phead{
+    display:flex;align-items:center;gap:8px;padding:8px 12px;min-height:44px;
+    border-bottom:1px solid var(--line);
+  }
+  #phead .t{font-size:13px;font-weight:600}
+  #phead .grow{flex:1}
+  .btn{
+    border:1px solid var(--line);background:var(--panel2);color:var(--fg);
+    padding:6px 11px;border-radius:9px;font-size:12.5px;cursor:pointer;font-family:inherit;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  #list{overflow:auto;padding:6px 10px}
+  .frow{
+    display:flex;align-items:center;gap:6px;padding:5px 4px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+  }
+  .frow.off{opacity:.45}
+  .frow.err .fx{border-color:var(--err)}
+  .dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);cursor:pointer;flex:0 0 auto}
+  .mode{
+    background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:5px 4px;font-size:12px;flex:0 0 auto;
+  }
+  .fx{
+    flex:1;min-width:120px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--fg);border-radius:8px;padding:7px 10px;
+    font:13px/1.4 ui-monospace,Menlo,monospace;outline:none;
+  }
+  .fx:focus{border-color:var(--accent)}
+  .del{
+    width:28px;height:28px;border-radius:8px;border:1px solid var(--line);
+    background:transparent;color:var(--dim);cursor:pointer;font-size:15px;flex:0 0 auto;
+  }
+  .del:hover{color:var(--err);border-color:var(--err)}
+  .errmsg{width:100%;font-size:11.5px;color:var(--err);padding-left:30px}
+  .errmsg:empty{display:none}
+
+  .samples-wrap{padding:8px 12px 12px;border-top:1px solid var(--line);overflow:auto}
+  .samples-wrap h4{margin:0 0 8px;font-size:12px;color:var(--dim);font-weight:500}
+  #samples{display:flex;flex-wrap:wrap;gap:6px}
+  .smp{
+    font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--dim);cursor:pointer;font-family:inherit;
+  }
+  .smp:hover{border-color:var(--accent);color:var(--accent)}
+
+  @media (min-width:900px){
+    #app{flex-direction:row}
+    #stage{flex:1}
+    #panel{width:390px;max-height:none;border-top:none;border-left:1px solid var(--line)}
+    #panel.collapsed{max-height:none;width:44px}
+    #panel.collapsed #phead{writing-mode:vertical-rl}
+    #panel.collapsed #phead .t{writing-mode:vertical-rl}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="tools">
+      <button id="zin" title="放大">＋</button>
+      <button id="zout" title="缩小">－</button>
+      <button id="gridbtn" class="on small" title="网格">网格</button>
+      <button id="themebtn" class="small" title="配色">跟随系统</button>
+      <button id="zreset" title="复位">⌂</button>
+    </div>
+    <div id="tip"></div>
+  </div>
+
+  <div id="panel">
+    <div id="phead">
+      <span class="t">函数</span>
+      <span class="grow"></span>
+      <button class="btn" id="togglePanel">收起/展开</button>
+      <button class="btn primary" id="addfn">＋ 添加</button>
+    </div>
+    <div id="list"></div>
+    <div class="samples-wrap">
+      <h4>示例（点击添加）：幂函数 / 指数 / 对数 / 三角 / 反三角 / 双曲 / 隐函数 / 极坐标 / 参数曲线</h4>
+      <div id="samples"></div>
+    </div>
+  </div>
+</div>
+
+<script src="parser.js"></script>
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+</script>
+</body>
+</html>
