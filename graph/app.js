@@ -105,8 +105,8 @@
       (state.theme === 'auto' && window.matchMedia &&
         window.matchMedia('(prefers-color-scheme: dark)').matches);
     return dark
-      ? { bg: '#0f1115', grid: '#1e2530', grid2: '#2a3342', axis: '#7d8aa0', text: '#8b95a7', fg: '#e6e9ef', tip: '#161a21' }
-      : { bg: '#ffffff', grid: '#eef1f5', grid2: '#dfe4ec', axis: '#6b7280', text: '#6b7280', fg: '#1b1f27', tip: '#ffffff' };
+      ? { bg: '#0f1115', grid: '#1b222d', grid2: '#2b3648', axis: '#9aa7bf', text: '#a9b4c6', fg: '#e6e9ef', tip: '#161a21' }
+      : { bg: '#ffffff', grid: '#f1f4f8', grid2: '#e1e7ef', axis: '#556070', text: '#556070', fg: '#1b1f27', tip: '#ffffff' };
   }
 
   // 取一个"好看"的网格步长：1/2/5 × 10^k
@@ -130,43 +130,55 @@
   // ── 绘图 ────────────────────────────────────────────────────────
   var lastPaths = [];      // 供点击取点用
 
-  function draw() {
-    var C = colors();
-    ctx.fillStyle = C.bg;
-    ctx.fillRect(0, 0, W, H);
+  // ── 网格 / 坐标轴（重写版：整数索引，杜绝浮点累加导致的错位）─────
+  function idxRange(w0, w1, step) {
+    return [Math.ceil(w0 / step), Math.floor(w1 / step)];
+  }
 
+  function drawGridAxes(C) {
     var ppu = state.view.ppu;
-    var step = niceStep(78 / ppu);
+    // 主刻度目标间距 ~86 屏幕像素
+    var step = niceStep(86 / ppu);
     var minor = step / 5;
+    var wx0 = toWorldX(0), wx1 = toWorldX(W);
+    var wy0 = toWorldY(H), wy1 = toWorldY(0);   // 注意：屏幕下边对应世界 y 的最小值
 
     if (state.grid) {
       // 次网格
       ctx.strokeStyle = C.grid;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      var x0 = Math.floor(toWorldX(0) / minor) * minor;
-      for (var gx = x0; gx <= toWorldX(W); gx += minor) {
-        var px = Math.round(toScreenX(gx)) + 0.5;
+      var ax0 = idxRange(wx0, wx1, minor), ay0 = idxRange(wy0, wy1, minor);
+      for (var i = ax0[0]; i <= ax0[1]; i++) {
+        var vx = i * minor;
+        if (Math.abs(vx) < minor * 1e-9) continue;
+        var px = Math.round(toScreenX(vx)) + 0.5;
         if (px < 0 || px > W) continue;
         ctx.moveTo(px, 0); ctx.lineTo(px, H);
       }
-      var y0 = Math.floor(toWorldY(H) / minor) * minor;
-      for (var gy = y0; gy <= toWorldY(0); gy += minor) {
-        var py = Math.round(toScreenY(gy)) + 0.5;
+      for (var j = ay0[0]; j <= ay0[1]; j++) {
+        var vy = j * minor;
+        if (Math.abs(vy) < minor * 1e-9) continue;
+        var py = Math.round(toScreenY(vy)) + 0.5;
         if (py < 0 || py > H) continue;
         ctx.moveTo(0, py); ctx.lineTo(W, py);
       }
-      ctx.globalAlpha = 0.55; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1;
 
       // 主网格
       ctx.strokeStyle = C.grid2;
       ctx.beginPath();
-      for (var mx = Math.floor(toWorldX(0) / step) * step; mx <= toWorldX(W); mx += step) {
+      var bx0 = idxRange(wx0, wx1, step), by0 = idxRange(wy0, wy1, step);
+      for (var k = bx0[0]; k <= bx0[1]; k++) {
+        var mx = k * step;
+        if (Math.abs(mx) < step * 1e-9) continue;
         var sx = Math.round(toScreenX(mx)) + 0.5;
         if (sx < 0 || sx > W) continue;
         ctx.moveTo(sx, 0); ctx.lineTo(sx, H);
       }
-      for (var my = Math.floor(toWorldY(H) / step) * step; my <= toWorldY(0); my += step) {
+      for (var m = by0[0]; m <= by0[1]; m++) {
+        var my = m * step;
+        if (Math.abs(my) < step * 1e-9) continue;
         var sy = Math.round(toScreenY(my)) + 0.5;
         if (sy < 0 || sy > H) continue;
         ctx.moveTo(0, sy); ctx.lineTo(W, sy);
@@ -174,36 +186,117 @@
       ctx.stroke();
     }
 
-    if (state.axes) {
-      ctx.strokeStyle = C.axis;
-      ctx.lineWidth = 1.4;
-      var ax = Math.round(toScreenX(0)) + 0.5;
-      var ay = Math.round(toScreenY(0)) + 0.5;
-      ctx.beginPath();
-      if (ay >= 0 && ay <= H) { ctx.moveTo(0, ay); ctx.lineTo(W, ay); }
-      if (ax >= 0 && ax <= W) { ctx.moveTo(ax, 0); ctx.lineTo(ax, H); }
-      ctx.stroke();
+    if (!state.axes) return;
 
-      // 刻度数字
-      ctx.fillStyle = C.text;
-      ctx.font = '11px ui-monospace,Menlo,monospace';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      for (var tx = Math.floor(toWorldX(0) / step) * step; tx <= toWorldX(W); tx += step) {
-        if (Math.abs(tx) < step * 1e-6) continue;
-        var tpx = toScreenX(tx);
-        if (tpx < 18 || tpx > W - 18) continue;
-        var ly = Math.min(Math.max(ay + 4, 2), H - 16);
-        ctx.fillText(fmt(tx, step), tpx, ly);
-      }
-      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      for (var ty = Math.floor(toWorldY(H) / step) * step; ty <= toWorldY(0); ty += step) {
-        if (Math.abs(ty) < step * 1e-6) continue;
-        var tpy = toScreenY(ty);
-        if (tpy < 10 || tpy > H - 10) continue;
-        var lx = Math.min(Math.max(ax - 5, 34), W - 4);
-        ctx.fillText(fmt(ty, step), lx, tpy);
+    // ── 坐标轴 ──
+    var axY = Math.round(toScreenY(0)) + 0.5;      // x 轴所在屏幕行
+    var ayX = Math.round(toScreenX(0)) + 0.5;      // y 轴所在屏幕列
+    var xVisible = axY >= 0 && axY <= H;
+    var yVisible = ayX >= 0 && ayX <= W;
+
+    ctx.strokeStyle = C.axis;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    if (xVisible) { ctx.moveTo(0, axY); ctx.lineTo(W, axY); }
+    if (yVisible) { ctx.moveTo(ayX, 0); ctx.lineTo(ayX, H); }
+    ctx.stroke();
+
+    // ── 刻度线 ──
+    var tickLen = 5;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    var tx0 = idxRange(wx0, wx1, step), ty0 = idxRange(wy0, wy1, step);
+    if (xVisible) {
+      for (var t = tx0[0]; t <= tx0[1]; t++) {
+        var tvx = t * step;
+        if (Math.abs(tvx) < step * 1e-9) continue;
+        var tpx = Math.round(toScreenX(tvx)) + 0.5;
+        if (tpx < 2 || tpx > W - 2) continue;
+        ctx.moveTo(tpx, axY - tickLen); ctx.lineTo(tpx, axY + tickLen);
       }
     }
+    if (yVisible) {
+      for (var u = ty0[0]; u <= ty0[1]; u++) {
+        var tvy = u * step;
+        if (Math.abs(tvy) < step * 1e-9) continue;
+        var tpy = Math.round(toScreenY(tvy)) + 0.5;
+        if (tpy < 2 || tpy > H - 2) continue;
+        ctx.moveTo(ayX - tickLen, tpy); ctx.lineTo(ayX + tickLen, tpy);
+      }
+    }
+    ctx.stroke();
+
+    // ── 刻度数字 ──
+    // 轴跑出画面时，把数字贴到屏幕边缘，始终看得见
+    var labelRow = xVisible ? Math.min(Math.max(axY + tickLen + 3, 3), H - 15)
+      : (toScreenY(0) > H ? H - 16 : 3);
+    var labelCol = yVisible ? Math.min(Math.max(ayX - tickLen - 4, 40), W - 6)
+      : (toScreenX(0) > W ? W - 6 : 40);
+
+    ctx.font = '600 11.5px ui-monospace,SFMono-Regular,Menlo,monospace';
+    ctx.fillStyle = C.text;
+
+    // 数字背后的底色，压在网格线上也读得清
+    function halo(x, y, w, h) {
+      ctx.save();
+      ctx.globalAlpha = 0.82;
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(x - 2, y - 1, w + 4, h + 2);
+      ctx.restore();
+      ctx.fillStyle = C.text;
+    }
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (var v = tx0[0]; v <= tx0[1]; v++) {
+      var lv = v * step;
+      if (Math.abs(lv) < step * 1e-9) continue;
+      var lpx = toScreenX(lv);
+      if (lpx < 20 || lpx > W - 20) continue;
+      var label = fmt(lv, step);
+      var wpx = ctx.measureText(label).width;
+      halo(lpx - wpx / 2, labelRow, wpx, 13);
+      ctx.fillText(label, lpx, labelRow);
+    }
+
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (var q = ty0[0]; q <= ty0[1]; q++) {
+      var lvy = q * step;
+      if (Math.abs(lvy) < step * 1e-9) continue;
+      var lpy = toScreenY(lvy);
+      if (lpy < 10 || lpy > H - 10) continue;
+      var labelY = fmt(lvy, step);
+      var wpy = ctx.measureText(labelY).width;
+      halo(labelCol - wpy, lpy - 7, wpy, 14);
+      ctx.textAlign = 'right';
+      ctx.fillText(labelY, labelCol, lpy);
+    }
+
+    // ── 原点 O 与轴名 ──
+    if (xVisible && yVisible) {
+      ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      halo(ayX - 16, axY + 4, 12, 13);
+      ctx.fillText('O', ayX - 5, axY + 4);
+    }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    if (xVisible) {
+      ctx.fillStyle = C.axis;
+      ctx.font = 'italic 600 13px ui-serif,Georgia,serif';
+      ctx.fillText('x', W - 6, axY - 4);
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    if (yVisible) {
+      ctx.fillStyle = C.axis;
+      ctx.font = 'italic 600 13px ui-serif,Georgia,serif';
+      ctx.fillText('y', ayX + 6, 6);
+    }
+  }
+
+  function draw() {
+    var C = colors();
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    drawGridAxes(C);
 
     // 曲线
     lastPaths = [];
@@ -221,18 +314,19 @@
     if (marker) {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(marker.sx, marker.sy, 5.5, 0, Math.PI * 2);
+      ctx.arc(marker.sx, marker.sy, 6, 0, Math.PI * 2);
       ctx.fillStyle = marker.color || C.fg;
       ctx.fill();
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.strokeStyle = C.bg;
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(marker.sx, 0); ctx.lineTo(marker.sx, H);
       ctx.moveTo(0, marker.sy); ctx.lineTo(W, marker.sy);
       ctx.strokeStyle = marker.color || C.text;
-      ctx.globalAlpha = 0.35;
-      ctx.setLineDash([4, 4]);
+      ctx.globalAlpha = 0.4;
+      ctx.setLineDash([5, 5]);
+      ctx.lineWidth = 1;
       ctx.stroke();
       ctx.restore();
     }
@@ -528,6 +622,8 @@
 
   function renderList() {
     listEl.innerHTML = '';
+    var badge = document.getElementById('fnCount');
+    if (badge) badge.textContent = state.funcs.filter(function (x) { return x.visible && !x.error; }).length;
     state.funcs.forEach(function (f) {
       var row = document.createElement('div');
       row.className = 'frow' + (f.visible ? '' : ' off') + (f.error ? ' err' : '');
@@ -629,6 +725,8 @@
   function renderSamples() {
     var box = document.getElementById('samples');
     box.innerHTML = '';
+    var cnt = document.getElementById('sampleCnt');
+    if (cnt) cnt.textContent = SAMPLES.length;
     SAMPLES.forEach(function (s) {
       var b = document.createElement('button');
       b.className = 'smp';
