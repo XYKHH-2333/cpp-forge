@@ -826,6 +826,28 @@
     });
   }
 
+  // ── 分享给好友 ──────────────────────────────────────────────────
+  var ONLINE_URL = 'https://xykhh-2333.github.io/cpp-forge/graph/';
+  function shareApp() {
+    // 装成 APK 时由原生接口接管（WebView 里没有 navigator.share）
+    if (window.AndroidShare && typeof window.AndroidShare.share === 'function') {
+      window.AndroidShare.share(
+        '函数绘图器：输入函数画图像，双指缩放、点曲线取坐标，离线可用。\n' + ONLINE_URL);
+      return;
+    }
+    var text = '函数绘图器：输入函数画图像，双指缩放、点曲线取坐标，离线可用。';
+    if (navigator.share) {
+      navigator.share({ title: '函数绘图器', text: text + '\n' + ONLINE_URL }).catch(function () {});
+      return;
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text + '\n' + ONLINE_URL).then(function () {
+        alert('链接已复制，去粘贴给好友吧');
+      }).catch(function () {});
+    }
+  }
+  document.getElementById('shareBtn').addEventListener('click', shareApp);
+
   // ── 面板折叠 ────────────────────────────────────────────────────
   document.getElementById('togglePanel').addEventListener('click', function () {
     document.getElementById('panel').classList.toggle('collapsed');
