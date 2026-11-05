@@ -108,6 +108,29 @@
     .k{color:#8250df}.t{color:#0550ae}.s{color:#0a7b34}.n{color:#b45309}.c{color:#6b7280}.p{color:#953800}.f{color:#0550ae}
   }
   .empty{padding:40px 20px;color:var(--dim);text-align:center;font-size:14px}
+  /* 可编辑代码区：底层高亮 <pre> + 上层透明 <textarea> 叠在一起 */
+  .editor{position:relative;flex:1;min-height:260px;background:var(--code-bg);min-height:0}
+  .editor > pre, .editor > textarea{
+    position:absolute;inset:0;margin:0;padding:14px 16px;border:0;
+    font:13.5px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    tab-size:2;white-space:pre;overflow:auto;box-sizing:border-box;
+  }
+  .editor > pre{color:var(--fg);pointer-events:none}
+  .editor > textarea{
+    background:transparent;color:transparent;caret-color:var(--fg);
+    -webkit-text-fill-color:transparent;resize:none;outline:none;
+    z-index:2;
+  }
+  .editor > textarea::selection{background:rgba(76,141,255,.35);-webkit-text-fill-color:transparent}
+  .editor.readonly > textarea{caret-color:transparent}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .badge.live{border-color:var(--ok);color:var(--ok)}
+  details#explainBox{border-bottom:1px solid var(--line);background:var(--panel)}
+  details#explainBox > summary{
+    padding:9px 16px;font-size:12.5px;color:var(--dim);cursor:pointer;user-select:none;
+  }
+  details#explainBox[open] > summary{color:var(--fg)}
+  #explain{padding:0 16px 12px;white-space:pre-wrap;font-size:13.5px;line-height:1.75;color:var(--fg);max-height:32vh;overflow:auto}
   #history{padding:14px 16px}
   .hist-item{
     border:1px solid var(--line);background:var(--panel);border-radius:10px;
@@ -202,7 +225,6 @@
   <section id="right">
     <div id="tabs">
       <div class="tab on" data-tab="code">代码</div>
-      <div class="tab" data-tab="explain">说明</div>
       <div class="tab" data-tab="history">历史</div>
       <span class="grow" style="flex:1"></span>
       <span id="status" style="align-self:center;padding-right:12px"></span>
@@ -211,17 +233,19 @@
       <div class="pane on" id="pane-code">
         <div class="bar">
           <span id="filename" style="font-size:12.5px;color:var(--dim)">main.cpp</span>
+          <span class="badge" id="editState">空</span>
           <span class="grow"></span>
           <button class="btn" id="btnCopy">复制</button>
           <button class="btn" id="btnDownload">下载</button>
-          <button class="btn" id="btnSaveHist">存入历史</button>
+          <button class="btn" id="btnSaveHist">存历史</button>
+          <button class="btn" id="btnClear">清空</button>
         </div>
-        <div class="body">
-          <pre class="code" id="code"><span class="empty">生成的代码会出现在这里</span></pre>
+        <details id="explainBox"><summary>思路说明</summary><div id="explain"></div></details>
+        <div class="editor" id="editor">
+          <pre id="hl"></pre>
+          <textarea id="ed" spellcheck="false" autocapitalize="off" autocomplete="off"
+                    autocorrect="off" placeholder="生成的代码会出现在这里，也可以直接在这里手写"></textarea>
         </div>
-      </div>
-      <div class="pane" id="pane-explain">
-        <div class="body"><div id="explain" class="empty">这里放思路说明</div></div>
       </div>
       <div class="pane" id="pane-history">
         <div class="body"><div id="history"><div class="empty">还没有历史记录</div></div></div>
@@ -278,7 +302,50 @@
   var DB = loadDB();
 
   var $ = function(id){ return document.getElementById(id); };
-  var codeEl=$('code'), explainEl=$('explain'), statusEl=$('status'), modelTag=$('modelTag');
+  var hlEl=$('hl'), edEl=$('ed'), explainEl=$('explain'), statusEl=$('status'), modelTag=$('modelTag');
+  var editStateEl=$('editState'), editorBox=$('editor');
+  var DRAFT_KEY='cpp-forge.draft';
+
+  // 高亮层跟随输入
+  function paint(){
+    hlEl.innerHTML = highlight(edEl.value) || ' ';
+    syncScroll();
+    setState(edEl.value.trim() ? '可编辑' : '空');
+  }
+  function syncScroll(){ hlEl.scrollTop=edEl.scrollTop; hlEl.scrollLeft=edEl.scrollLeft; }
+  function setState(txt, live){
+    editStateEl.textContent = txt;
+    editStateEl.className = 'badge' + (live ? ' live' : '');
+  }
+  function setCode(text, opts){
+    var o = opts || {};
+    edEl.value = text || '';
+    paint();
+    if(!o.keepScroll){ edEl.scrollTop=0; hlEl.scrollTop=0; }
+  }
+  function setReadonly(ro){ editorBox.classList.toggle('readonly', !!ro); }
+
+  // 输入：重绘高亮 + 存草稿（防抖）
+  var draftTimer=null;
+  edEl.addEventListener('input', function(){
+    paint();
+    clearTimeout(draftTimer);
+    draftTimer=setTimeout(function(){
+      try{ localStorage.setItem(DRAFT_KEY, JSON.stringify({code:edEl.value, explain:lastParsed.explain||'', at:Date.now()})); }
+      catch(e){ /* 存不下就算了 */ }
+    }, 400);
+  });
+  edEl.addEventListener('scroll', syncScroll);
+  // Tab 键插入两个空格，而不是跳出输入框
+  edEl.addEventListener('keydown', function(e){
+    if(e.key==='Tab'){
+      e.preventDefault();
+      var st=edEl.selectionStart, en=edEl.selectionEnd;
+      edEl.value = edEl.value.slice(0,st) + '  ' + edEl.value.slice(en);
+      edEl.selectionStart = edEl.selectionEnd = st+2;
+      paint();
+    }
+  });
 
   // ── 小工具 ────────────────────────────────────────────────────────
   var toastTimer=null;
@@ -388,8 +455,8 @@
     var btn=$('btnGen'), stop=$('btnStop');
     btn.disabled=true; stop.disabled=false; statusEl.textContent='生成中…';
     var buffer='', finishReason='';
-    codeEl.innerHTML='<span class="c">// 生成中…</span>';
-    explainEl.className=''; explainEl.textContent='';
+    setCode(''); setReadonly(true); setState('生成中…', true);
+    explainEl.textContent='';
     controller = (typeof AbortController!=='undefined') ? new AbortController() : null;
 
     try{
@@ -439,7 +506,8 @@
       }
       render(buffer);
       if(!buffer.trim()){
-        codeEl.innerHTML='<span class="c">// 模型没有返回内容（可能额度被思考过程吃完了），再点一次生成试试</span>';
+        setCode(''); setReadonly(false); setState('无内容');
+        toast('模型没返回内容，重试一次', true);
         statusEl.textContent='无内容';
         toast('模型没返回内容，重试一次', true);
       }else if(finishReason==='length'){
@@ -447,8 +515,11 @@
         toast('输出被截断了，可以减少要求后重试', true);
       }else{
         statusEl.textContent='完成 · '+nowStr();
-        setFilename();
-        toast('生成完成');
+        setReadonly(false); setState('可编辑'); setFilename();
+        if(lastParsed.explain && !document.getElementById('explainBox').open){
+          document.getElementById('explainBox').open = true;
+        }
+        toast('生成完成，可以直接改');
       }
     }catch(err){
       if(err && err.name==='AbortError'){ statusEl.textContent='已停止'; toast('已停止'); }
@@ -458,7 +529,8 @@
         if(/401/.test(msg)) msg='API Key 无效或已过期（401）';
         else if(/402/.test(msg)) msg='账户余额不足（402）';
         else if(/Failed to fetch|NetworkError/i.test(msg)) msg='网络无法连接，检查网络或 API 地址';
-        codeEl.innerHTML='<span class="c">// '+esc(msg)+'</span>';
+        setReadonly(false); setState('失败');
+        if(!edEl.value.trim()) setCode('// ' + msg);
         toast(msg, true);
       }
     }finally{
@@ -470,10 +542,12 @@
   function render(text){
     var p=splitAnswer(text);
     lastParsed=p;
-    if(p.code){ codeEl.innerHTML=highlight(p.code); }
-    else if(!p.explain){ codeEl.innerHTML='<span class="c">// 等待内容…</span>'; }
-    else { codeEl.innerHTML='<span class="c">// 正在写代码…</span>'; }
-    explainEl.textContent = p.explain || '（模型没给说明）';
+    if(p.code){ setCode(p.code, {keepScroll:true}); setState('生成中…', true); }
+    else if(!p.explain){ setCode('', {keepScroll:true}); }
+    explainEl.textContent = p.explain || '';
+    if(p.explain && !document.getElementById('explainBox').open && !p.code){
+      document.getElementById('explainBox').open = true;   // 还没开始出代码时先把说明露出来
+    }
   }
   function setFilename(){
     var m=(lastParsed.code||'').match(/class\s+(\w+)|struct\s+(\w+)|^[^\n]*?\b(\w+)\s*\(/m);
@@ -488,8 +562,8 @@
     if((e.ctrlKey||e.metaKey) && e.key==='Enter') generate();
   });
   $('btnCopy').addEventListener('click', async function(){
-    var t=lastParsed.code||'';
-    if(!t) return toast('还没有代码', true);
+    var t=edEl.value||'';
+    if(!t.trim()) return toast('还没有代码', true);
     try{ await navigator.clipboard.writeText(t); toast('已复制'); }
     catch(e){
       var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta);
@@ -498,7 +572,7 @@
     }
   });
   $('btnDownload').addEventListener('click', function(){
-    var t=lastParsed.code||''; if(!t) return toast('还没有代码', true);
+    var t=edEl.value||''; if(!t.trim()) return toast('还没有代码', true);
     var blob=new Blob([t],{type:'text/x-c++src'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=$('filename').textContent||'main.cpp';
@@ -506,18 +580,38 @@
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 3000);
   });
   $('btnSaveHist').addEventListener('click', function(){
-    if(!lastParsed.code && !lastParsed.explain) return toast('还没有内容', true);
+    if(!edEl.value.trim() && !lastParsed.explain) return toast('还没有内容', true);
     var item={
       id: Date.now()+'-'+Math.random().toString(36).slice(2,7),
       at: nowStr(),
       req: $('req').value.trim(),
       opts: {std:$('std').value, comment:$('comment').value, style:$('style').value, extra:$('extra').value},
-      explain: lastParsed.explain, code: lastParsed.code
+      explain: lastParsed.explain, code: edEl.value
     };
     DB.history.unshift(item);
     if(DB.history.length>200) DB.history.length=200;   // 只留最近 200 条，防止塞爆
     saveDB(); renderHistory(); toast('已存入历史');
   });
+
+  $('btnClear').addEventListener('click', function(){
+    if(!edEl.value.trim()) return;
+    if(!confirm('清空编辑区的代码？（历史记录里已保存的不受影响）')) return;
+    setCode(''); lastParsed={explain:lastParsed.explain, code:''};
+    try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+  });
+
+  // 打开页面时恢复上次的草稿（刷新/误关都不丢）
+  (function(){
+    try{
+      var raw=localStorage.getItem(DRAFT_KEY);
+      if(!raw) return;
+      var d=JSON.parse(raw);
+      if(d && d.code){
+        setCode(d.code); setReadonly(false);
+        lastParsed.explain=d.explain||''; explainEl.textContent=d.explain||'';
+      }
+    }catch(e){}
+  })();
 
   // ── 标签页 ────────────────────────────────────────────────────────
   document.querySelectorAll('.tab').forEach(function(tab){
@@ -549,7 +643,7 @@
         if(it.opts){ $('std').value=it.opts.std||'C++17'; $('comment').value=it.opts.comment||'medium';
           $('style').value=it.opts.style||'normal'; $('extra').value=it.opts.extra||'main'; }
         lastParsed={explain:it.explain||'',code:it.code||''};
-        codeEl.innerHTML=it.code?highlight(it.code):'<span class="empty">这条没有代码</span>';
+        setCode(it.code||''); setReadonly(false);
         explainEl.textContent=it.explain||'';
         document.querySelector('.tab[data-tab="code"]').click();
       });
@@ -628,6 +722,7 @@
 
   refreshTag();
   renderHistory();
+  paint();
 
   // ── 桌面快捷方式直达：#gen 聚焦输入框 / #history 打开历史 ─────────
   (function(){
