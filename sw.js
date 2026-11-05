@@ -9,7 +9,7 @@
  * 策略：外壳用 cache-first（秒开、离线可用），请求失败时回退到缓存；
  *       版本号变了会在下次打开时更新。
  */
-const CACHE = 'cpp-forge-v2';
+const CACHE = 'cpp-forge-v5';
 const ASSETS = [
   './',
   './index.html',
