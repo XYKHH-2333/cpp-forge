@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="C++生成器">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   :root{
     --bg:#0f1115; --panel:#161a21; --panel2:#1c212b; --line:#262c38;
@@ -699,7 +700,8 @@
     var d = $('pwaDiag'); if(!d) return;
     d.innerHTML =
       'Serivce Worker：' + esc(swState) + '<br>'
-      + '安装入口：' + (installEvt ? '✅ 可用（点上方按钮）' : '❌ 未出现（Chrome 没把当前来源当成可安装站点）') + '<br>'
+      + 'SW 已接管页面：' + (navigator.serviceWorker && navigator.serviceWorker.controller ? '✅ 是' : '❌ 否（刷新一次）') + '<br>'
+      + '安装入口：' + (installEvt ? '✅ 可用（点上方按钮）' : '❌ 未出现') + '<br>'
       + '运行模式：' + (standalone ? '独立窗口（已安装）' : '普通标签页') + '<br>'
       + '浏览器：' + (isInAppBrowser() ? '⚠️ 应用内浏览器（不支持安装）' : '普通浏览器') + '<br>'
       + '当前地址：' + esc(location.origin);
@@ -731,7 +733,9 @@
       var msg = inApp
         ? '⚠️ 你现在的浏览器是「应用内浏览器」（DSHA 或微信/QQ 之类打开的窗口），<b>它不支持安装网页应用</b>。\n\n'
           + '请复制下面的地址，用手机自带的 <b>Chrome / 浏览器</b> 打开，再安装。\n\n'
-        : '这个浏览器没有给出「安装」入口。可能是：不支持 PWA、或页面是第一次打开（需要刷新一次）。\n\n';
+        : '当前浏览器没有触发安装入口。最常见的原因是**这一页是第一次打开**：\n'
+          + '第一次只会注册 Service Worker，安装入口要到**第二次打开**才出现。\n\n'
+          + '请先刷新一次；刷新后还没有，就用浏览器菜单里的「安装应用 / 添加到主屏幕」。\n\n';
       showInstallHelp(msg);
       return;
     }
