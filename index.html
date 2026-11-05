@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>C++ 代码生成器</title>
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="C++生成器">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a21; --panel2:#1c212b; --line:#262c38;
+    --fg:#e6e9ef; --dim:#8b95a7; --accent:#4c8dff; --ok:#3ddc97; --warn:#ffb454; --err:#ff6b6b;
+    --code-bg:#0b0e13; --radius:12px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --line:#e2e5ea;
+      --fg:#1b1f27; --dim:#6b7280; --accent:#2563eb; --ok:#0a8f5b; --warn:#b45309; --err:#dc2626;
+      --code-bg:#fbfbfd;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    display:flex;align-items:center;gap:12px;padding:12px 16px;
+    border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:10;
+  }
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+  header .sub{color:var(--dim);font-size:12px}
+  header .grow{flex:1}
+  .btn{
+    appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--fg);
+    padding:7px 12px;border-radius:9px;font-size:13px;cursor:pointer;transition:.15s;
+    font-family:inherit;white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.08);color:#fff}
+  .btn.ghost{background:transparent}
+  main{
+    display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:0;
+    height:calc(100vh - 57px);
+  }
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;height:auto}
+    #left{border-right:none;border-bottom:1px solid var(--line)}
+  }
+  #left{display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--panel);min-height:0}
+  #left .scroll{overflow:auto;padding:14px 16px;flex:1;min-height:0}
+  label.field{display:block;margin-bottom:14px}
+  label.field > span{display:block;font-size:12px;color:var(--dim);margin-bottom:6px}
+  textarea,input,select{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+    border-radius:9px;padding:10px 12px;font:inherit;outline:none;
+  }
+  textarea{resize:vertical;min-height:120px;line-height:1.55}
+  textarea:focus,input:focus,select:focus{border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{
+    font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--dim);cursor:pointer;
+  }
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .actions{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:var(--panel)}
+  .actions .btn.primary{flex:1}
+  #right{display:flex;flex-direction:column;min-height:0;background:var(--bg)}
+  #tabs{display:flex;gap:6px;padding:10px 14px 0;border-bottom:1px solid var(--line);background:var(--panel)}
+  .tab{
+    padding:7px 14px;border-radius:9px 9px 0 0;font-size:13px;cursor:pointer;color:var(--dim);
+    border:1px solid transparent;border-bottom:none;
+  }
+  .tab.on{color:var(--fg);background:var(--bg);border-color:var(--line)}
+  #panes{flex:1;min-height:0;position:relative}
+  .pane{position:absolute;inset:0;display:none;flex-direction:column;min-height:0}
+  .pane.on{display:flex}
+  .pane .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .pane .bar .grow{flex:1}
+  .pane .body{flex:1;overflow:auto;min-height:0}
+  #explain{padding:16px 18px;white-space:pre-wrap;color:var(--fg);font-size:14px}
+  #status{font-size:12px;color:var(--dim)}
+  pre.code{
+    margin:0;padding:16px 18px;background:var(--code-bg);min-height:100%;
+    font:13.5px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    tab-size:4;white-space:pre;overflow:auto;
+  }
+  .k{color:#c792ea}.t{color:#82aaff}.s{color:#c3e88d}.n{color:#f78c6c}.c{color:#5f7e97;font-style:italic}
+  .p{color:#ffcb6b}.f{color:#89ddff}
+  @media (prefers-color-scheme: light){
+    .k{color:#8250df}.t{color:#0550ae}.s{color:#0a7b34}.n{color:#b45309}.c{color:#6b7280}.p{color:#953800}.f{color:#0550ae}
+  }
+  .empty{padding:40px 20px;color:var(--dim);text-align:center;font-size:14px}
+  #history{padding:14px 16px}
+  .hist-item{
+    border:1px solid var(--line);background:var(--panel);border-radius:10px;
+    padding:10px 12px;margin-bottom:10px;cursor:pointer;
+  }
+  .hist-item:hover{border-color:var(--accent)}
+  .hist-item .t{font-size:13.5px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hist-item .m{font-size:11.5px;color:var(--dim);display:flex;gap:10px}
+  .hist-item .del{color:var(--err);margin-left:auto}
+  /* 设置弹层 */
+  #mask{position:fixed;inset:0;background:#0008;display:none;z-index:50;align-items:center;justify-content:center;padding:16px}
+  #mask.on{display:flex}
+  #dlg{
+    width:min(560px,96vw);max-height:88vh;overflow:auto;background:var(--panel);border:1px solid var(--line);
+    border-radius:16px;padding:20px;
+  }
+  #dlg h2{font-size:15px;margin:0 0 4px}
+  #dlg .hint{font-size:12px;color:var(--dim);margin-bottom:16px}
+  #dlg .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--line);color:var(--fg);
+    padding:9px 16px;border-radius:999px;font-size:13px;z-index:99;opacity:0;pointer-events:none;
+    transition:.2s;box-shadow:0 8px 30px #0005;
+  }
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  .toast.err{border-color:var(--err);color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <h1>C++ 代码生成器</h1>
+  <span class="sub" id="modelTag">未配置</span>
+  <span class="grow"></span>
+  <button class="btn" id="btnShare">分享</button>
+  <button class="btn" id="btnInstall" style="display:none">安装到桌面</button>
+  <button class="btn ghost" id="btnSettings">设置</button>
+</header>
+
+<main>
+  <section id="left">
+    <div class="scroll">
+      <label class="field">
+        <span>你要什么代码</span>
+        <textarea id="req" placeholder="例如：写一个线程安全的环形缓冲区 RingBuffer，支持多生产者多消费者、容量固定、阻塞等待，并带一个使用示例"></textarea>
+      </label>
+      <div class="chips" id="presets"></div>
+
+      <div class="row" style="margin-top:16px">
+        <label class="field"><span>标准</span>
+          <select id="std">
+            <option>C++11</option><option selected>C++17</option>
+            <option>C++20</option><option>C++23</option><option>C++14</option>
+          </select>
+        </label>
+        <label class="field"><span>注释</span>
+          <select id="comment">
+            <option value="few">精简</option><option value="medium" selected>适中</option><option value="rich">详细</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field"><span>风格</span>
+          <select id="style">
+            <option value="normal" selected>通用清晰</option>
+            <option value="modern">现代 RAII</option>
+            <option value="google">Google</option>
+            <option value="llvm">LLVM</option>
+            <option value="contest">竞赛紧凑</option>
+          </select>
+        </label>
+        <label class="field"><span>附带</span>
+          <select id="extra">
+            <option value="main" selected>含 main 示例</option>
+            <option value="tests">含断言测试</option>
+            <option value="header">拆成 .h + .cpp</option>
+            <option value="none">只要核心实现</option>
+          </select>
+        </label>
+      </div>
+      <label class="field">
+        <span>额外约束（可选）</span>
+        <input id="constraint" placeholder="例如：不要用第三方库；内存控制在 O(1) 额外空间">
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnGen">生成代码</button>
+      <button class="btn" id="btnStop" disabled>停止</button>
+    </div>
+  </section>
+
+  <section id="right">
+    <div id="tabs">
+      <div class="tab on" data-tab="code">代码</div>
+      <div class="tab" data-tab="explain">说明</div>
+      <div class="tab" data-tab="history">历史</div>
+      <span class="grow" style="flex:1"></span>
+      <span id="status" style="align-self:center;padding-right:12px"></span>
+    </div>
+    <div id="panes">
+      <div class="pane on" id="pane-code">
+        <div class="bar">
+          <span id="filename" style="font-size:12.5px;color:var(--dim)">main.cpp</span>
+          <span class="grow"></span>
+          <button class="btn" id="btnCopy">复制</button>
+          <button class="btn" id="btnDownload">下载</button>
+          <button class="btn" id="btnSaveHist">存入历史</button>
+        </div>
+        <div class="body">
+          <pre class="code" id="code"><span class="empty">生成的代码会出现在这里</span></pre>
+        </div>
+      </div>
+      <div class="pane" id="pane-explain">
+        <div class="body"><div id="explain" class="empty">这里放思路说明</div></div>
+      </div>
+      <div class="pane" id="pane-history">
+        <div class="body"><div id="history"><div class="empty">还没有历史记录</div></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="mask">
+  <div id="dlg">
+    <h2>设置</h2>
+    <div class="hint">配置只保存在这台设备的浏览器里，不会上传到任何地方。</div>
+    <label class="field"><span>API 地址</span>
+      <input id="cfgBase" placeholder="https://api.deepseek.com" autocomplete="off">
+    </label>
+    <label class="field"><span>API Key</span>
+      <input id="cfgKey" type="password" placeholder="sk-..." autocomplete="off">
+    </label>
+    <label class="field"><span>模型</span>
+      <input id="cfgModel" placeholder="deepseek-flash">
+    </label>
+    <label class="field"><span>温度（0~1.5，越高越发散）</span>
+      <input id="cfgTemp" type="number" step="0.1" min="0" max="1.5" placeholder="0.3">
+    </label>
+    <div id="pwaDiag" style="font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px;margin-top:4px;line-height:1.9"></div>
+    <div class="foot">
+      <button class="btn" id="btnExport">导出全部数据</button>
+      <button class="btn" id="btnImport">导入</button>
+      <button class="btn primary" id="btnSaveCfg">保存</button>
+    </div>
+    <input type="file" id="fileImport" accept="application/json" style="display:none">
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+  // ── 存储（带版本号，方便以后迁移而不丢数据）──────────────────────────
+  var DB_KEY = 'cpp-forge.v1';
+  function loadDB(){
+    try{
+      var raw = localStorage.getItem(DB_KEY);
+      if(!raw) return {config:defaultConfig(), history:[]};
+      var d = JSON.parse(raw) || {};
+      return {config:Object.assign(defaultConfig(), d.config||{}), history:Array.isArray(d.history)?d.history:[]};
+    }catch(e){ return {config:defaultConfig(), history:[]}; }
+  }
+  function saveDB(){ try{ localStorage.setItem(DB_KEY, JSON.stringify(DB)); }catch(e){ toast('保存失败：浏览器存储已满或被禁用', true); } }
+  function defaultConfig(){
+    return {base:'https://api.deepseek.com', key:'', model:'deepseek-flash', temp:0.3};
+  }
+  var DB = loadDB();
+
+  var $ = function(id){ return document.getElementById(id); };
+  var codeEl=$('code'), explainEl=$('explain'), statusEl=$('status'), modelTag=$('modelTag');
+
+  // ── 小工具 ────────────────────────────────────────────────────────
+  var toastTimer=null;
+  function toast(msg, isErr){
+    var t=$('toast'); t.textContent=msg;
+    t.className='toast on'+(isErr?' err':'');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){ t.className='toast'; },2200);
+  }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function nowStr(){ var d=new Date(); return today()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+
+  // ── C++ 语法高亮（自己写的，无第三方依赖）─────────────────────────
+  var KEYWORDS = ('alignas alignof and asm auto bool break case catch char char8_t char16_t char32_t class const consteval '+
+    'constexpr constinit const_cast continue co_await co_return co_yield decltype default delete do double dynamic_cast else '+
+    'enum explicit export extern false float for friend goto if inline int long mutable namespace new noexcept nullptr operator '+
+    'or private protected public register reinterpret_cast requires return short signed sizeof static static_assert static_cast '+
+    'struct switch template this thread_local throw true try typedef typeid typename union unsigned using virtual void volatile '+
+    'wchar_t while override final concept consteval').split(' ');
+  var TYPES = ('std string vector map unordered_map set unordered_set queue deque stack list array pair tuple optional variant '+
+    'shared_ptr unique_ptr weak_ptr function thread mutex condition_variable atomic chrono iostream fstream sstream string_view '+
+    'size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t').split(' ');
+
+  function highlight(src){
+    var out='', i=0, n=src.length;
+    function isId(c){ return /[A-Za-z0-9_]/.test(c); }
+    while(i<n){
+      var c=src[i], c2=src.substr(i,2);
+      // 注释
+      if(c2==='//'){ var j=src.indexOf('\n',i); if(j<0)j=n;
+        out+='<span class="c">'+esc(src.slice(i,j))+'</span>'; i=j; continue; }
+      if(c2==='/*'){ var k=src.indexOf('*/',i+2); k=(k<0?n:k+2);
+        out+='<span class="c">'+esc(src.slice(i,k))+'</span>'; i=k; continue; }
+      // 字符串 / 字符
+      if(c==='"'||c==="'"){ var q=c, s=i+1;
+        while(s<n){ if(src[s]==='\\'){ s+=2; continue; } if(src[s]===q){ s++; break; } if(src[s]==='\n'){ break; } s++; }
+        out+='<span class="s">'+esc(src.slice(i,s))+'</span>'; i=s; continue; }
+      // 预处理
+      if(c==='#' && (i===0 || src[i-1]==='\n') && /^\s*(include|define|if|ifdef|ifndef|else|endif|pragma|undef)/.test(src.slice(i+1,i+20))){
+        var l=src.indexOf('\n',i); if(l<0)l=n;
+        out+='<span class="p">'+esc(src.slice(i,l))+'</span>'; i=l; continue;
+      }
+      // 数字
+      if(/[0-9]/.test(c) && !isId(src[i-1]||'')){
+        var m=src.slice(i).match(/^0[xX][0-9a-fA-F]+[uUlL]*|^[0-9]+\.?[0-9]*(?:[eE][+-]?[0-9]+)?[fFuUlL]*/);
+        if(m){ out+='<span class="n">'+esc(m[0])+'</span>'; i+=m[0].length; continue; }
+      }
+      // 标识符
+      if(isId(c) && !/[0-9]/.test(c)){
+        var e=i; while(e<n && isId(src[e])) e++;
+        var w=src.slice(i,e);
+        var cls = KEYWORDS.indexOf(w)>=0 ? 'k' : (TYPES.indexOf(w)>=0 ? 't' : null);
+        if(cls) out+='<span class="'+cls+'">'+esc(w)+'</span>';
+        else out+=esc(w);
+        i=e; continue;
+      }
+      out+=esc(c); i++;
+    }
+    return out;
+  }
+
+  // ── 从模型输出里拆出「说明」和「代码块」───────────────────────────
+  function splitAnswer(text){
+    var m = text.match(/```[ \t]*([A-Za-z0-9_+-]*)[ \t]*\n([\s\S]*?)(?:```|$)/);
+    if(m){
+      var lang=(m[1]||'').toLowerCase(), code=m[2];
+      var before=text.slice(0,m.index), after=text.slice(m.index+m[0].length);
+      return {explain:(before+'\n'+after).trim(), code:code.replace(/\s+$/,''), lang:lang};
+    }
+    return {explain:text.trim(), code:'', lang:''};
+  }
+
+  // ── 组装提示词 ────────────────────────────────────────────────────
+  var STD_NOTE={ 'C++11':'C++11（不要用 C++14 以后的东西）','C++14':'C++14','C++17':'C++17','C++20':'C++20','C++23':'C++23' };
+  var COMMENT_NOTE={ few:'注释精简，只在关键处点一句', medium:'注释适中，关键逻辑和接口各写一句', rich:'注释详细，接口、参数含义、边界条件都写清楚' };
+  var STYLE_NOTE={ normal:'风格通用清晰、命名直观', modern:'现代 C++ 风格：RAII、避免裸 new/delete、能用标准库就不用轮子',
+    google:'遵循 Google C++ Style', llvm:'遵循 LLVM C++ Style', contest:'竞赛风格：紧凑、去掉多余空行、能一行写完的不要拆' };
+  var EXTRA_NOTE={ main:'最后给一个 main 函数示例，能直接编译运行并看到输出',
+    tests:'最后给一段基于 assert 的自测代码，放在 #ifndef NDEBUG 里',
+    header:'按「头文件 + 实现文件」拆分，用 ```cpp 分块输出并标注文件名',
+    none:'只给核心实现，不要 main、不要测试' };
+
+  function buildMessages(){
+    var req=$('req').value.trim();
+    if(!req) return null;
+    var std=$('std').value, cm=$('comment').value, st=$('style').value, ex=$('extra').value;
+    var cons=$('constraint').value.trim();
+    var sys = '你是一位资深 C++ 工程师，负责把需求写成可以直接编译运行的代码。\n'
+      + '输出格式严格要求：\n'
+      + '1. 先用 2~5 行中文说明思路、关键设计点、时间/空间复杂度（不要长篇大论）；\n'
+      + '2. 然后给一个 ```cpp 代码块；\n'
+      + '3. 代码必须自包含：该 include 的头文件都写上，不依赖任何第三方库；\n'
+      + '4. 不要输出「希望有帮助」这类客套话，不要重复解释代码里已有的注释。\n'
+      + '约束：' + STD_NOTE[std] + '；' + COMMENT_NOTE[cm] + '；' + STYLE_NOTE[st] + '；' + EXTRA_NOTE[ex] + '。';
+    if(cons) sys += '\n额外要求：' + cons;
+    return [{role:'system',content:sys},{role:'user',content:req}];
+  }
+
+  // ── 调用模型（流式）───────────────────────────────────────────────
+  var controller=null;
+  async function generate(){
+    var messages=buildMessages();
+    if(!messages){ toast('先写一句需求', true); $('req').focus(); return; }
+    if(!DB.config.key){ toast('先在右上角「设置」里填 API Key', true); openSettings(); return; }
+
+    var btn=$('btnGen'), stop=$('btnStop');
+    btn.disabled=true; stop.disabled=false; statusEl.textContent='生成中…';
+    var buffer='', finishReason='';
+    codeEl.innerHTML='<span class="c">// 生成中…</span>';
+    explainEl.className=''; explainEl.textContent='';
+    controller = (typeof AbortController!=='undefined') ? new AbortController() : null;
+
+    try{
+      var res = await fetch(DB.config.base.replace(/\/+$/,'') + '/chat/completions', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+DB.config.key},
+        body: JSON.stringify({
+          model: DB.config.model,
+          messages: messages,
+          temperature: Number(DB.config.temp)||0.3,
+          max_tokens: 8000,     // 注意：思考模型的 reasoning 也吃这个额度
+          stream: true
+        }),
+        signal: controller ? controller.signal : undefined
+      });
+      if(!res.ok){
+        var t=await res.text().catch(function(){return '';});
+        throw new Error('HTTP '+res.status+' '+(t||'').slice(0,200));
+      }
+      var reader = res.body && res.body.getReader ? res.body.getReader() : null;
+      if(!reader){                       // 老浏览器兜底：非流式
+        var j=await res.json();
+        buffer=(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'';
+        render(buffer);
+      }else{
+        var dec=new TextDecoder('utf-8'), carry='';
+        while(true){
+          var r=await reader.read();
+          if(r.done) break;
+          carry += dec.decode(r.value,{stream:true});
+          var lines=carry.split('\n'); carry=lines.pop();
+          for(var i=0;i<lines.length;i++){
+            var line=lines[i].trim();
+            if(!line || line.indexOf('data:')!==0) continue;
+            var payload=line.slice(5).trim();
+            if(payload==='[DONE]'){ carry=''; break; }
+            try{
+              var o=JSON.parse(payload);
+              var ch=o.choices && o.choices[0];
+              if(ch && ch.finish_reason) finishReason=ch.finish_reason;
+              var d=ch && ch.delta;
+              if(d && d.content) buffer+=d.content;
+            }catch(e){}
+          }
+          render(buffer);
+        }
+      }
+      render(buffer);
+      if(!buffer.trim()){
+        codeEl.innerHTML='<span class="c">// 模型没有返回内容（可能额度被思考过程吃完了），再点一次生成试试</span>';
+        statusEl.textContent='无内容';
+        toast('模型没返回内容，重试一次', true);
+      }else if(finishReason==='length'){
+        statusEl.textContent='已截断 · '+nowStr();
+        toast('输出被截断了，可以减少要求后重试', true);
+      }else{
+        statusEl.textContent='完成 · '+nowStr();
+        setFilename();
+        toast('生成完成');
+      }
+    }catch(err){
+      if(err && err.name==='AbortError'){ statusEl.textContent='已停止'; toast('已停止'); }
+      else{
+        statusEl.textContent='失败';
+        var msg=String(err&&err.message||err);
+        if(/401/.test(msg)) msg='API Key 无效或已过期（401）';
+        else if(/402/.test(msg)) msg='账户余额不足（402）';
+        else if(/Failed to fetch|NetworkError/i.test(msg)) msg='网络无法连接，检查网络或 API 地址';
+        codeEl.innerHTML='<span class="c">// '+esc(msg)+'</span>';
+        toast(msg, true);
+      }
+    }finally{
+      btn.disabled=false; stop.disabled=true; controller=null;
+    }
+  }
+
+  var lastParsed={explain:'',code:''};
+  function render(text){
+    var p=splitAnswer(text);
+    lastParsed=p;
+    if(p.code){ codeEl.innerHTML=highlight(p.code); }
+    else if(!p.explain){ codeEl.innerHTML='<span class="c">// 等待内容…</span>'; }
+    else { codeEl.innerHTML='<span class="c">// 正在写代码…</span>'; }
+    explainEl.textContent = p.explain || '（模型没给说明）';
+  }
+  function setFilename(){
+    var m=(lastParsed.code||'').match(/class\s+(\w+)|struct\s+(\w+)|^[^\n]*?\b(\w+)\s*\(/m);
+    var name=(m&&(m[1]||m[2]||m[3]))||'main';
+    $('filename').textContent = name.charAt(0).toLowerCase()+name.slice(1)+'.cpp';
+  }
+
+  // ── 按钮 ──────────────────────────────────────────────────────────
+  $('btnGen').addEventListener('click', generate);
+  $('btnStop').addEventListener('click', function(){ if(controller) controller.abort(); });
+  $('req').addEventListener('keydown', function(e){
+    if((e.ctrlKey||e.metaKey) && e.key==='Enter') generate();
+  });
+  $('btnCopy').addEventListener('click', async function(){
+    var t=lastParsed.code||'';
+    if(!t) return toast('还没有代码', true);
+    try{ await navigator.clipboard.writeText(t); toast('已复制'); }
+    catch(e){
+      var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta);
+      ta.select(); try{ document.execCommand('copy'); toast('已复制'); }catch(_){ toast('复制失败', true); }
+      document.body.removeChild(ta);
+    }
+  });
+  $('btnDownload').addEventListener('click', function(){
+    var t=lastParsed.code||''; if(!t) return toast('还没有代码', true);
+    var blob=new Blob([t],{type:'text/x-c++src'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=$('filename').textContent||'main.cpp';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 3000);
+  });
+  $('btnSaveHist').addEventListener('click', function(){
+    if(!lastParsed.code && !lastParsed.explain) return toast('还没有内容', true);
+    var item={
+      id: Date.now()+'-'+Math.random().toString(36).slice(2,7),
+      at: nowStr(),
+      req: $('req').value.trim(),
+      opts: {std:$('std').value, comment:$('comment').value, style:$('style').value, extra:$('extra').value},
+      explain: lastParsed.explain, code: lastParsed.code
+    };
+    DB.history.unshift(item);
+    if(DB.history.length>200) DB.history.length=200;   // 只留最近 200 条，防止塞爆
+    saveDB(); renderHistory(); toast('已存入历史');
+  });
+
+  // ── 标签页 ────────────────────────────────────────────────────────
+  document.querySelectorAll('.tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('on'); });
+      document.querySelectorAll('.pane').forEach(function(p){ p.classList.remove('on'); });
+      tab.classList.add('on');
+      $('pane-'+tab.dataset.tab).classList.add('on');
+      if(tab.dataset.tab==='history') renderHistory();
+    });
+  });
+
+  // ── 历史 ──────────────────────────────────────────────────────────
+  function renderHistory(){
+    var box=$('history');
+    if(!DB.history.length){ box.innerHTML='<div class="empty">还没有历史记录</div>'; return; }
+    box.innerHTML='';
+    DB.history.forEach(function(it){
+      var d=document.createElement('div'); d.className='hist-item';
+      d.innerHTML='<div class="t">'+esc(it.req||'(无标题)')+'</div>'
+        + '<div class="m"><span>'+esc(it.at||'')+'</span><span>'+esc(it.opts&&it.opts.std||'')+'</span>'
+        + '<span class="del">删除</span></div>';
+      d.addEventListener('click', function(e){
+        if(e.target.classList.contains('del')){
+          DB.history=DB.history.filter(function(x){ return x.id!==it.id; });
+          saveDB(); renderHistory(); return;
+        }
+        $('req').value=it.req||'';
+        if(it.opts){ $('std').value=it.opts.std||'C++17'; $('comment').value=it.opts.comment||'medium';
+          $('style').value=it.opts.style||'normal'; $('extra').value=it.opts.extra||'main'; }
+        lastParsed={explain:it.explain||'',code:it.code||''};
+        codeEl.innerHTML=it.code?highlight(it.code):'<span class="empty">这条没有代码</span>';
+        explainEl.textContent=it.explain||'';
+        document.querySelector('.tab[data-tab="code"]').click();
+      });
+      box.appendChild(d);
+    });
+  }
+
+  // ── 设置 ──────────────────────────────────────────────────────────
+  function openSettings(){
+    try{ refreshDiag(); }catch(e){}
+    $('cfgBase').value=DB.config.base; $('cfgKey').value=DB.config.key;
+    $('cfgModel').value=DB.config.model; $('cfgTemp').value=DB.config.temp;
+    $('mask').classList.add('on');
+  }
+  $('btnSettings').addEventListener('click', openSettings);
+  $('mask').addEventListener('click', function(e){ if(e.target.id==='mask') $('mask').classList.remove('on'); });
+  $('btnSaveCfg').addEventListener('click', function(){
+    DB.config.base=($('cfgBase').value.trim()||'https://api.deepseek.com');
+    DB.config.key=$('cfgKey').value.trim();
+    DB.config.model=($('cfgModel').value.trim()||'deepseek-flash');
+    DB.config.temp=Number($('cfgTemp').value)||0.3;
+    saveDB(); refreshTag(); $('mask').classList.remove('on');
+    toast(DB.config.key?'设置已保存':'已保存（还没填 Key）');
+  });
+  function refreshTag(){
+    modelTag.textContent = DB.config.key ? (DB.config.model+' · 就绪') : '未配置 API Key';
+  }
+  $('btnExport').addEventListener('click', function(){
+    var blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='cpp-forge-backup-'+today()+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); },3000);
+    toast('已导出');
+  });
+  $('btnImport').addEventListener('click', function(){ $('fileImport').click(); });
+  $('fileImport').addEventListener('change', function(e){
+    var f=e.target.files&&e.target.files[0]; if(!f) return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      try{
+        var d=JSON.parse(rd.result);
+        if(d.config) DB.config=Object.assign(DB.config, d.config);
+        if(Array.isArray(d.history)){
+          var seen={}; DB.history.forEach(function(x){ seen[x.id]=1; });
+          d.history.forEach(function(x){ if(!seen[x.id]) DB.history.unshift(x); });
+          if(DB.history.length>200) DB.history.length=200;
+        }
+        saveDB(); refreshTag(); renderHistory(); $('mask').classList.remove('on');
+        toast('导入成功');
+      }catch(err){ toast('导入失败：不是合法备份文件', true); }
+    };
+    rd.readAsText(f);
+  });
+
+  // ── 预设 ──────────────────────────────────────────────────────────
+  var PRESETS=[
+    ['线程安全队列','写一个线程安全的阻塞队列 BlockingQueue<T>，支持 push/pop、可关闭、用 condition_variable 实现'],
+    ['环形缓冲区','写一个固定容量、无锁（或自旋锁）的环形缓冲区，支持多生产者多消费者'],
+    ['智能指针','手写一个简化版 unique_ptr 和 shared_ptr（含引用计数、移动语义）'],
+    ['数据结构','写一个支持区间查询的线段树（区间求和 + 单点修改）'],
+    ['算法','写一个并查集，带路径压缩和按秩合并，并分析复杂度'],
+    ['文件解析','写一个 CSV 解析器，支持引号转义、空行、可配置分隔符'],
+    ['网络','用 POSIX socket 写一个简单的 TCP 回显服务器（多线程）'],
+    ['类设计','设计一个事件总线 EventBus，支持订阅/发布、取消订阅、线程安全'],
+    ['性能','写一个 SIMD 友好的矩阵乘法并做循环分块优化，给出 benchmark']
+  ];
+  (function(){
+    var box=$('presets');
+    PRESETS.forEach(function(p){
+      var b=document.createElement('span'); b.className='chip'; b.textContent=p[0];
+      b.addEventListener('click', function(){ $('req').value=p[1]; $('req').focus(); });
+      box.appendChild(b);
+    });
+  })();
+
+  refreshTag();
+  renderHistory();
+
+  // ── 桌面快捷方式直达：#gen 聚焦输入框 / #history 打开历史 ─────────
+  (function(){
+    var h=(location.hash||'').replace('#','');
+    if(h==='history'){ var t=document.querySelector('.tab[data-tab="history"]'); if(t) t.click(); }
+    else if(h==='gen'){ setTimeout(function(){ $('req').focus(); },300); }
+  })();
+
+  // 安装说明面板（比 alert 好复制地址）
+  function showInstallHelp(head){
+    var old = document.getElementById('installHelp');
+    if(old) old.parentNode.removeChild(old);
+    var box = document.createElement('div');
+    box.id = 'installHelp';
+    box.style.cssText = 'position:fixed;inset:0;background:#0008;z-index:60;display:flex;'
+      + 'align-items:center;justify-content:center;padding:16px';
+    box.innerHTML = '<div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;'
+      + 'padding:20px;max-width:520px;width:100%;line-height:1.8;font-size:14px">'
+      + '<div style="white-space:pre-wrap;margin-bottom:14px">' + head + '</div>'
+      + '<div style="font-family:ui-monospace,monospace;background:var(--panel2);border:1px solid var(--line);'
+      + 'border-radius:9px;padding:10px;word-break:break-all;margin-bottom:14px" id="ihUrl">'
+      + esc(location.origin) + '/</div>'
+      + '<div style="font-size:12.5px;color:var(--dim);margin-bottom:16px">'
+      + '在 Chrome 里打开后：右上角 <b>⋮</b> → 「安装应用」或「添加到主屏幕」。'
+      + '（Chrome 若显示的是"添加到主屏幕"，得到的图标会在 Chrome 里打开，同样能用。）</div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+      + '<button class="btn" id="ihCopy">复制地址</button>'
+      + '<button class="btn primary" id="ihClose">知道了</button></div></div>';
+    document.body.appendChild(box);
+    box.addEventListener('click', function(e){ if(e.target===box) document.body.removeChild(box); });
+    document.getElementById('ihClose').addEventListener('click', function(){ document.body.removeChild(box); });
+    document.getElementById('ihCopy').addEventListener('click', async function(){
+      try{ await navigator.clipboard.writeText(location.origin + '/'); toast('地址已复制'); }
+      catch(e){ toast('复制失败，请手动选中', true); }
+    });
+  }
+
+  // ── 分享这个 App ─────────────────────────────────────────────────
+  $('btnShare').addEventListener('click', async function(){
+    var isLocal = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
+    var url = location.href.split('#')[0];
+    var text = isLocal
+      ? 'C++ 代码生成器：输入需求直接生成可编译的 C++ 代码。我这个是本地地址（别人打不开），要给别人用得导出安装包或传到静态托管。'
+      : 'C++ 代码生成器：输入需求直接生成可编译的 C++ 代码，可以装到桌面当 App 用。';
+    try{
+      if(navigator.share){
+        await navigator.share({title:'C++ 代码生成器', text:text, url:url});
+        return;
+      }
+    }catch(e){ if(e && e.name==='AbortError') return; }
+    try{
+      await navigator.clipboard.writeText(isLocal ? text : (text+'\n'+url));
+      toast(isLocal ? '本地地址别人打不开，已复制说明文字' : '链接已复制');
+    }catch(e){ toast('分享失败：浏览器不支持', true); }
+  });
+
+  // ── PWA：注册 Service Worker、处理"安装到桌面" ──────────────────
+  var installEvt = null;
+  var swState = '未注册', standalone = false;
+  try{
+    standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+  }catch(e){}
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      swState = reg.active ? 'active' : 'installing';
+      navigator.serviceWorker.ready.then(function(){ swState='active'; refreshDiag(); });
+      refreshDiag();
+    }).catch(function(err){
+      swState = '注册失败：' + (err && err.message || err);
+      refreshDiag();
+    });
+  } else {
+    swState = '浏览器不支持';
+  }
+  function refreshDiag(){
+    var d = $('pwaDiag'); if(!d) return;
+    d.innerHTML =
+      'Serivce Worker：' + esc(swState) + '<br>'
+      + '安装入口：' + (installEvt ? '✅ 可用（点上方按钮）' : '❌ 未出现（Chrome 没把当前来源当成可安装站点）') + '<br>'
+      + '运行模式：' + (standalone ? '独立窗口（已安装）' : '普通标签页') + '<br>'
+      + '浏览器：' + (isInAppBrowser() ? '⚠️ 应用内浏览器（不支持安装）' : '普通浏览器') + '<br>'
+      + '当前地址：' + esc(location.origin);
+  }
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    installEvt = e;
+    $('btnInstall').style.display = '';
+    $('btnInstall').textContent = '安装到桌面';
+    if(typeof refreshDiag === 'function') refreshDiag();
+  });
+  // 3 秒内没等到可安装事件 → 说明当前来源不被 Chrome 认可（多半是自签 HTTPS），
+  // 直接把"换哪个地址、点哪里"写给人看，别让人干等着一个永远不出现的按钮。
+  function isInAppBrowser(){
+    var ua = navigator.userAgent || '';
+    return /; wv\)/.test(ua) || /Version\/\d+.*Mobile Safari/.test(ua) && !/CriOS|Chrome\//.test(ua)
+      || /MicroMessenger|QQ\/|AlipayClient|DingTalk|Weibo/i.test(ua);
+  }
+  setTimeout(function(){
+    if(installEvt) return;
+    if(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return;
+    $('btnInstall').style.display='';
+    $('btnInstall').textContent='怎么装到桌面？';
+  }, 3000);
+
+  $('btnInstall').addEventListener('click', function(){
+    if(!installEvt){
+      var inApp = isInAppBrowser();
+      var msg = inApp
+        ? '⚠️ 你现在的浏览器是「应用内浏览器」（DSHA 或微信/QQ 之类打开的窗口），<b>它不支持安装网页应用</b>。\n\n'
+          + '请复制下面的地址，用手机自带的 <b>Chrome / 浏览器</b> 打开，再安装。\n\n'
+        : '这个浏览器没有给出「安装」入口。可能是：不支持 PWA、或页面是第一次打开（需要刷新一次）。\n\n';
+      showInstallHelp(msg);
+      return;
+    }
+    installEvt.prompt();
+    installEvt.userChoice.then(function(r){
+      if(r && r.outcome === 'accepted'){ toast('已安装，去桌面看看'); $('btnInstall').style.display='none'; }
+      installEvt = null;
+    });
+  });
+  window.addEventListener('appinstalled', function(){
+    installEvt = null;
+    $('btnInstall').style.display = 'none';
+    toast('已安装到桌面');
+  });
+  // 离线时给个体提示（外壳已缓存，功能可用，只是生成需要联网）
+  function updateNet(){
+    if(!navigator.onLine){ statusEl.textContent = '离线（外壳已缓存，生成需要联网）'; }
+  }
+  window.addEventListener('offline', updateNet);
+  window.addEventListener('online', function(){ statusEl.textContent=''; });
+
+  // 暴露给自动化测试
+  window.__cppforge = {highlight:highlight, splitAnswer:splitAnswer, buildMessages:buildMessages, DB:DB};
+})();
+</script>
+</body>
+</html>
