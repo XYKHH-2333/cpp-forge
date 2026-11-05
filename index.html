@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>C++ 代码生成器</title>
 <meta name="theme-color" content="#0f1115">
 <meta name="mobile-web-app-capable" content="yes">
@@ -619,7 +619,7 @@
   });
 
   // ── 字号缩放 + 全屏 ──────────────────────────────────────────────
-  var CODE_FS_MIN = 10, CODE_FS_MAX = 30;
+  var CODE_FS_MIN = 9, CODE_FS_MAX = 64;   // 约 7 倍范围，够放大到单字看细节
   function applyFont(v){
     v = Math.max(CODE_FS_MIN, Math.min(CODE_FS_MAX, Math.round(v)));
     document.documentElement.style.setProperty('--code-fs', v + 'px');
@@ -650,6 +650,46 @@
     if(document.fullscreenElement && document.exitFullscreen){ document.exitFullscreen().catch(function(){}); }
     paint();
   }
+  // ── 双指捏合缩放（只缩放代码，不影响整页布局）─────────────────
+  var pinchStart = 0, pinchFont = 0, pinchActive = false;
+  function touchDist(t){
+    var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx*dx + dy*dy) || 1;
+  }
+  function onPinchStart(e){
+    if(e.touches.length === 2){
+      pinchStart = touchDist(e.touches);
+      pinchFont = Number(DB.config.codeFont) || 13.5;
+      pinchActive = true;
+      edEl.blur();                      // 双指时不要弹输入法/选词
+    }
+  }
+  function onPinchMove(e){
+    if(!pinchActive || e.touches.length !== 2) return;
+    e.preventDefault();                 // 阻止浏览器自己的页面缩放
+    var ratio = touchDist(e.touches) / pinchStart;
+    var next = pinchFont * ratio;
+    // 缩放过程中不写 localStorage（每次都写会卡），松手后再存
+    document.documentElement.style.setProperty('--code-fs',
+      Math.max(CODE_FS_MIN, Math.min(CODE_FS_MAX, Math.round(next))) + 'px');
+    DB.config.codeFont = Math.max(CODE_FS_MIN, Math.min(CODE_FS_MAX, Math.round(next)));
+  }
+  function onPinchEnd(e){
+    if(e.touches.length < 2 && pinchActive){
+      pinchActive = false; pinchStart = 0;
+      saveDB();
+      toast('字号 ' + (Number(DB.config.codeFont)||13.5) + 'px');
+    }
+  }
+  var touchTargets = [$('pane-code'), hlEl, edEl, $('explainBox')];
+  touchTargets.forEach(function(el){
+    if(!el) return;
+    el.addEventListener('touchstart', onPinchStart, {passive:true});
+    el.addEventListener('touchmove', onPinchMove, {passive:false});
+    el.addEventListener('touchend', onPinchEnd, {passive:true});
+    el.addEventListener('touchcancel', onPinchEnd, {passive:true});
+  });
+
   $('btnFull').addEventListener('click', function(){ isFs() ? exitFs() : enterFs(); });
   $('btnExitFs').addEventListener('click', exitFs);
   document.addEventListener('fullscreenchange', function(){
