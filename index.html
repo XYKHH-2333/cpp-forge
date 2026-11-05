@@ -142,6 +142,22 @@
     bottom:calc(16px + env(safe-area-inset-bottom,0px));gap:8px;z-index:210;
   }
   #fsBar .btn{box-shadow:0 6px 20px #0006;background:var(--panel)}
+  details#presetBox{
+    border:1px solid var(--line);border-radius:10px;background:var(--panel2);
+    margin:10px 0 2px;overflow:hidden;
+  }
+  details#presetBox > summary{
+    padding:9px 12px;font-size:12.5px;color:var(--dim);cursor:pointer;user-select:none;
+    display:flex;align-items:center;gap:6px;
+  }
+  details#presetBox > summary::before{content:"▸";font-size:10px;transition:.15s}
+  details#presetBox[open] > summary::before{transform:rotate(90deg)}
+  details#presetBox[open] > summary{color:var(--fg);border-bottom:1px solid var(--line)}
+  details#presetBox .cnt{
+    font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;
+    padding:0 6px;line-height:16px;
+  }
+  details#presetBox .chips{padding:10px 12px 12px;margin-top:0}
   details#explainBox{border-bottom:1px solid var(--line);background:var(--panel)}
   details#explainBox > summary{
     padding:9px 16px;font-size:12.5px;color:var(--dim);cursor:pointer;user-select:none;
@@ -194,9 +210,12 @@
         <span>你要什么代码</span>
         <textarea id="req" placeholder="例如：写一个线程安全的环形缓冲区 RingBuffer，支持多生产者多消费者、容量固定、阻塞等待，并带一个使用示例"></textarea>
       </label>
-      <div class="chips" id="presets"></div>
+      <details id="presetBox">
+        <summary>快速模板<span class="cnt" id="presetCnt"></span></summary>
+        <div class="chips" id="presets"></div>
+      </details>
 
-      <div class="row" style="margin-top:16px">
+      <div class="row" style="margin-top:12px">
         <label class="field"><span>标准</span>
           <select id="std">
             <option>C++11</option><option selected>C++17</option>
@@ -821,9 +840,16 @@
   ];
   (function(){
     var box=$('presets');
+    $('presetCnt').textContent = PRESETS.length;   // 标题上显示模板数量
     PRESETS.forEach(function(p){
       var b=document.createElement('span'); b.className='chip'; b.textContent=p[0];
-      b.addEventListener('click', function(){ $('req').value=p[1]; $('req').focus(); });
+      b.addEventListener('click', function(){
+        $('req').value=p[1];
+        $('req').focus();
+        // 选完自动收起，把地方还给输入框（手机上尤其需要）
+        $('presetBox').open = false;
+        toast('已填入：' + p[0]);
+      });
       box.appendChild(b);
     });
   })();
