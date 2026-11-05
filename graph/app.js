@@ -81,6 +81,8 @@
   // ── 画布与坐标变换 ─────────────────────────────────────────────
   var canvas = document.getElementById('cv');
   var ctx = canvas.getContext('2d');
+  var ovl = document.getElementById('ov');
+  var octx = ovl.getContext('2d');
   var DPR = Math.min(window.devicePixelRatio || 1, 2.5);
   var W = 0, H = 0;
 
@@ -90,7 +92,10 @@
     H = Math.max(1, Math.round(r.height));
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
+    ovl.width = Math.round(W * DPR);
+    ovl.height = Math.round(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    octx.setTransform(DPR, 0, 0, DPR, 0, 0);
     draw();
   }
 
@@ -311,25 +316,33 @@
       strokePath(pts, f.color);
     }
 
-    if (marker) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(marker.sx, marker.sy, 6, 0, Math.PI * 2);
-      ctx.fillStyle = marker.color || C.fg;
-      ctx.fill();
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = C.bg;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(marker.sx, 0); ctx.lineTo(marker.sx, H);
-      ctx.moveTo(0, marker.sy); ctx.lineTo(W, marker.sy);
-      ctx.strokeStyle = marker.color || C.text;
-      ctx.globalAlpha = 0.4;
-      ctx.setLineDash([5, 5]);
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-    }
+    drawMarker();
+  }
+
+  // 标记点单独画在叠加层：曲线不动时只重画这一层，手指拖动才跟手
+  function drawMarker() {
+    var C = colors();
+    octx.clearRect(0, 0, W, H);
+    if (!marker) return;
+    octx.save();
+    octx.beginPath();
+    octx.moveTo(marker.sx, 0); octx.lineTo(marker.sx, H);
+    octx.moveTo(0, marker.sy); octx.lineTo(W, marker.sy);
+    octx.strokeStyle = marker.color || C.axis;
+    octx.globalAlpha = 0.42;
+    octx.setLineDash([5, 5]);
+    octx.lineWidth = 1;
+    octx.stroke();
+    octx.globalAlpha = 1;
+    octx.setLineDash([]);
+    octx.beginPath();
+    octx.arc(marker.sx, marker.sy, 7, 0, Math.PI * 2);
+    octx.fillStyle = marker.color || C.fg;
+    octx.fill();
+    octx.lineWidth = 2.5;
+    octx.strokeStyle = C.bg;
+    octx.stroke();
+    octx.restore();
   }
 
   function strokePath(segments, color) {
@@ -474,6 +487,17 @@
   var drag = null;
   var pinch = null;
   var marker = null;
+  var tracing = null;      // 正在沿某条曲线描点
+
+  // 描点：只更新标记点与提示，不重画背景/坐标轴/曲线
+  function applyTrace(p) {
+    if (!tracing) return;
+    var q = pointOnCurve(tracing.item, p.x, p.y);
+    if (!q) return;
+    marker = { sx: q.sx, sy: q.sy, wx: q.wx, wy: q.wy, color: tracing.item.f.color };
+    showTip(q.sx, q.sy, q.wx, q.wy, tracing.item.f);
+    drawMarker();
+  }
 
   function ptOf(e) { return { x: e.clientX - canvas.getBoundingClientRect().left, y: e.clientY - canvas.getBoundingClientRect().top }; }
 
@@ -483,8 +507,18 @@
     pointers[e.pointerId] = p;
     var ids = Object.keys(pointers);
     if (ids.length === 1) {
-      drag = { start: p, last: p, moved: 0, time: Date.now() };
+      // 按住曲线附近 → 进入"沿曲线描点"模式，画面不移动
+      var hit = curveAt(p.x, p.y, 42);
+      if (hit) {
+        tracing = { item: hit.item, p: hit.p };
+        applyTrace(p);
+        drag = null;
+      } else {
+        tracing = null;
+        drag = { start: p, last: p, moved: 0, time: Date.now() };
+      }
     } else if (ids.length === 2) {
+      tracing = null;
       var a = pointers[ids[0]], b = pointers[ids[1]];
       pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), ppu: state.view.ppu, cx: state.view.cx, cy: state.view.cy };
       var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -500,10 +534,16 @@
     pointers[e.pointerId] = p;
     var ids = Object.keys(pointers);
 
+    if (tracing && ids.length === 1) {
+      applyTrace(p);
+      return;
+    }
+
     if (ids.length >= 2 && pinch) {
       var a = pointers[ids[0]], b = pointers[ids[1]];
       var d = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
-      var k = d / pinch.dist;
+      clearMarker();
+    var k = d / pinch.dist;
       state.view.ppu = Math.max(1e-4, Math.min(4e6, pinch.ppu * k));
       // 以两指中点为锚点缩放，手感才对
       var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -517,6 +557,7 @@
       var dx = p.x - drag.last.x, dy = p.y - drag.last.y;
       drag.moved += Math.abs(dx) + Math.abs(dy);
       drag.last = p;
+      clearMarker();                     // 画面一动，旧标记点就不在原地了
       state.view.cx -= dx / state.view.ppu;
       state.view.cy += dy / state.view.ppu;
       draw();
@@ -528,15 +569,58 @@
     delete pointers[e.pointerId];
     var ids = Object.keys(pointers);
     if (ids.length < 2) pinch = null;
-    if (ids.length === 0 && drag) {
-      var quick = drag.moved < 8 && (Date.now() - drag.time) < 400;
-      if (quick && p) pick(p.x, p.y);
-      drag = null;
-      save();
+    if (ids.length === 0) {
+      if (tracing) { tracing = null; return; }   // 描点结束，标记留在原处
+      if (drag) {
+        var quick = drag.moved < 8 && (Date.now() - drag.time) < 400;
+        if (quick && p) pick(p.x, p.y);
+        drag = null;
+        save();
+      }
     }
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
+
+  // 在单条曲线上找离手指最近的点
+  function nearestOn(item, sx, sy) {
+    var best = null, bd = Infinity;
+    for (var s = 0; s < item.pts.length; s++) {
+      var seg = item.pts[s];
+      for (var k = 0; k < seg.length; k++) {
+        var dx = seg[k].sx - sx, dy = seg[k].sy - sy;
+        var d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = seg[k]; }
+      }
+    }
+    return best ? { p: best, d: Math.sqrt(bd) } : null;
+  }
+
+  // 在所有曲线里找最近的（maxPx 内算命中）
+  function curveAt(sx, sy, maxPx) {
+    var best = null, bd = maxPx * maxPx;
+    for (var i = 0; i < lastPaths.length; i++) {
+      var r = nearestOn(lastPaths[i], sx, sy);
+      if (r && r.d * r.d <= bd) { bd = r.d * r.d; best = { item: lastPaths[i], p: r.p, d: r.d }; }
+    }
+    return best;
+  }
+
+  // 沿曲线拖动时，用这个函数把手指位置投影到曲线上的点
+  function pointOnCurve(item, sx, sy) {
+    var f = item.f;
+    // 显式函数：直接用横坐标求值，比离散采样更准、更跟手
+    if (f.mode === 'y' && f.fn) {
+      var wx = toWorldX(sx), wy;
+      try { wy = f.fn(wx, 0, 0); } catch (e) { wy = NaN; }
+      if (isFinite(wy)) {
+        var syS = toScreenY(wy);
+        if (syS > -H && syS < H * 2) return { wx: wx, wy: wy, sx: toScreenX(wx), sy: syS };
+      }
+    }
+    var r = nearestOn(item, sx, sy);
+    return r ? r.p : null;
+  }
 
   // 点击取点：找最近的曲线点
   function pick(sx, sy) {
@@ -579,7 +663,8 @@
     tip.style.top = Math.max(8, top) + 'px';
     if (f) tip.style.borderColor = f.color;
   }
-  function hideTip() { tip.style.display = 'none'; marker = null; draw(); }
+  function hideTip() { tip.style.display = 'none'; marker = null; drawMarker(); }
+  function clearMarker() { if (marker) { marker = null; tip.style.display = 'none'; drawMarker(); } }
 
   // 滚轮缩放（电脑上）
   canvas.addEventListener('wheel', function (e) {
@@ -595,6 +680,7 @@
 
   // ── 缩放按钮 ────────────────────────────────────────────────────
   function zoomBy(k) {
+    clearMarker();
     var wx = state.view.cx, wy = state.view.cy;
     state.view.ppu = Math.max(1e-4, Math.min(4e6, state.view.ppu * k));
     state.view.cx = wx; state.view.cy = wy;
@@ -768,5 +854,21 @@
   resize();
 
   // 暴露给自动化测试
-  window.__graph = { state: state, draw: draw, pick: pick, toWorldX: toWorldX, toWorldY: toWorldY, addFunc: addFunc };
+  window.__graph = {
+    state: state, draw: draw, pick: pick, addFunc: addFunc,
+    toWorldX: toWorldX, toWorldY: toWorldY, toScreenX: toScreenX, toScreenY: toScreenY,
+    // 供自动化测试：模拟"按住曲线 → 沿曲线拖动"的完整流程
+    paths: function () { return lastPaths; },
+    curveAt: curveAt,
+    beginTrace: function (sx, sy) {
+      var hit = curveAt(sx, sy, 42);
+      if (!hit) return null;
+      tracing = { item: hit.item, p: hit.p };
+      applyTrace({ x: sx, y: sy });
+      return { color: hit.item.f.color, text: hit.item.f.text, mode: hit.item.f.mode };
+    },
+    moveTrace: function (sx, sy) { applyTrace({ x: sx, y: sy }); return marker; },
+    endTrace: function () { tracing = null; },
+    marker: function () { return marker; }
+  };
 })();
