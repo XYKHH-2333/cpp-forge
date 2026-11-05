@@ -34,9 +34,8 @@
   canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
   /* 曲线画在 #cv 上（只在视图变化时重绘），标记点画在 #ov 上（跟着手指高频重绘） */
   #ov{position:absolute;inset:0;pointer-events:none;z-index:2}
-  @supports (padding: env(safe-area-inset-top)){
-    #stage{padding-top:env(safe-area-inset-top)}
-  }
+  /* 两张画布必须完全重合：都铺满 #stage，不能一个吃 padding 一个不吃 */
+  #cv{position:absolute;inset:0}
 
   /* 右上角工具按钮 */
   #tools{
