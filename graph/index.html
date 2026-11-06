@@ -147,6 +147,28 @@
     #panel.collapsed #phead{writing-mode:vertical-rl}
     #panel.collapsed #phead .t{writing-mode:vertical-rl}
   }
+
+  /* 键盘弹出时浮在键盘上方的实时预览：永远能看到自己正在输入什么 */
+  #kbBar{
+    position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;
+    padding:8px 14px calc(8px + env(safe-area-inset-bottom));
+    background:rgba(18,24,34,.97);border-top:1px solid var(--line);
+    backdrop-filter:blur(12px);
+  }
+  #kbBar.on{display:block}
+  #kbBar .kbExpr{
+    font:600 15px ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:var(--fg);white-space:nowrap;overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;
+  }
+  #kbBar .kbExpr::-webkit-scrollbar{display:none}
+  #kbBar .kbExpr .caret{display:inline-block;width:2px;height:15px;
+    background:var(--accent);vertical-align:-2px;animation:kbBlink 1s steps(1) infinite}
+  @keyframes kbBlink{50%{opacity:0}}
+  #kbBar .kbInfo{
+    margin-top:3px;font:12px ui-monospace,Menlo,monospace;color:var(--dim);
+  }
+  #kbBar .kbInfo b{color:var(--accent);font-weight:600}
 </style>
 </head>
 <body>
@@ -188,5 +210,9 @@
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }
 </script>
+<div id="kbBar">
+  <div class="kbExpr" id="kbExpr"><span class="caret"></span></div>
+  <div class="kbInfo" id="kbInfo"></div>
+</div>
 </body>
 </html>
