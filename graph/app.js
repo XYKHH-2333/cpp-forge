@@ -59,6 +59,16 @@
     return f;
   }
 
+  // 把 f.domain 解析成判断函数；写错时报错但不影响曲线本身
+  function applyDomain(f) {
+    f.domFn = null;
+    f.domError = '';
+    if (!f.domain) return;
+    var d = compileDomain(f.domain);
+    if (d.error) { f.domError = d.error; return; }
+    f.domFn = d.fn;
+  }
+
   function compileFunc(f) {
     f.error = '';
     f.fn = null;
@@ -67,6 +77,7 @@
       f.normalized = P.normalize ? P.normalize(f.text) : f.text;
     } catch (e2) { f.normalized = f.text; }
     if (!f.text.trim()) return;
+    applyDomain(f);
     try {
       if (f.mode === 'param') {
         var parts = f.text.split(';');
@@ -123,6 +134,17 @@
     var m = raw / Math.pow(10, e);
     var s = m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10;
     return s * Math.pow(10, e);
+  }
+
+  // 坐标标签的位数只由数值大小决定，和缩放无关（放大缩小时读数不会变）
+  function fmtStable(v) {
+    if (!isFinite(v)) return v > 0 ? '∞' : '-∞';
+    if (Math.abs(v) < 1e-12) return '0';
+    if (Math.abs(v) >= 1e6 || (Math.abs(v) < 1e-3 && v !== 0)) {
+      return v.toExponential(4).replace('e+', 'e');
+    }
+    var s = v.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+    return s;
   }
 
   function fmt(v, step) {
@@ -430,7 +452,7 @@
       ctx.fillStyle = 0xFFFFFFFF;
       ctx.fill();
 
-      var txt = '(' + fmt(p.x, step * 0.01) + ', ' + fmt(p.y, step * 0.01) + ')';
+      var txt = '(' + fmtStable(p.x) + ', ' + fmtStable(p.y) + ')';
       ctx.font = '600 10.5px ui-monospace,SFMono-Regular,Menlo,monospace';
       var tw = ctx.measureText(txt).width;
       var lx = sx + 9, ly = sy + 14;
@@ -456,8 +478,10 @@
       if (!f.visible || f.error || !f.fn || f.mode !== 'y') continue;
       if (f.evalX === null || f.evalX === undefined) continue;
       if (f.evalY === null || f.evalY === undefined || !isFinite(f.evalY)) continue;
-      var sx = toScreenX(f.evalX), sy = toScreenY(f.evalY);
-      if (sx < -200 || sx > W + 200 || sy < -200 || sy > H + 200) continue;
+      var isInf = !isFinite(f.evalX);
+      var sx = isInf ? (f.evalX > 0 ? W - 26 : 26) : toScreenX(f.evalX);
+      var sy = toScreenY(f.evalY);
+      if (sy < -200 || sy > H + 200) continue;
 
       ctx.save();
       ctx.beginPath();
@@ -468,7 +492,9 @@
       ctx.strokeStyle = C.bg;
       ctx.stroke();
 
-      var txt = '(' + fmt(f.evalX, step * 0.01) + ', ' + fmt(f.evalY, step * 0.01) + ')';
+      var txt = isInf
+        ? ('x→' + (f.evalX > 0 ? '+∞' : '-∞') + '，y→' + fmtStable(f.evalY))
+        : ('(' + fmtStable(f.evalX) + ', ' + fmtStable(f.evalY) + ')');
       ctx.font = '600 11px ui-monospace,SFMono-Regular,Menlo,monospace';
       var tw = ctx.measureText(txt).width;
       var lx = sx + 10, ly = sy - 12;
@@ -528,12 +554,58 @@
   }
 
   // 显式 y=f(x)：按屏幕列采样
+  // 定义域解析：把 "x>0"、"x>=1"、"x<2"、"0<x<=5"、"x!=1" 变成判断函数
+  function compileDomain(text) {
+    var t = String(text || '')
+      .replace(/\s+/g, '')
+      .replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/≠/g, '!=')
+      .replace(/＞/g, '>').replace(/＜/g, '<').replace(/＝/g, '=')
+      .replace(/∞/g, 'Infinity').replace(/和|且|,/g, '&');
+    if (!t || t === 'R' || t === 'r') return { fn: function () { return true; }, text: '全体实数' };
+    var conds = t.split('&').filter(Boolean);
+    var ops = [];
+    for (var i = 0; i < conds.length; i++) {
+      var c = conds[i];
+      var m;
+      // 0<x<5 这种连写
+      if ((m = /^(-?[\d.]+|Infinity)<x<=?(-?[\d.]+|Infinity)$/.exec(c))) {
+        ops.push({ lo: parseFloat(m[1]), loInc: false, hi: parseFloat(m[2]), hiInc: c.indexOf('<=') >= 0 });
+      } else if ((m = /^(-?[\d.]+|Infinity)<=x<(-?[\d.]+|Infinity)$/.exec(c))) {
+        ops.push({ lo: parseFloat(m[1]), loInc: true, hi: parseFloat(m[2]), hiInc: false });
+      } else if ((m = /^x(>=|<=|>|<|!=)(-?[\d.]+|Infinity|-Infinity)$/.exec(c))) {
+        var op = m[1], v = parseFloat(m[2]);
+        if (op === '>=') ops.push({ lo: v, loInc: true });
+        else if (op === '>') ops.push({ lo: v, loInc: false });
+        else if (op === '<=') ops.push({ hi: v, hiInc: true });
+        else if (op === '<') ops.push({ hi: v, hiInc: false });
+        else ops.push({ not: v });
+      } else {
+        return { error: '定义域看不懂：' + c + '（例：x>0、0<x<5、x!=1）' };
+      }
+    }
+    var fn = function (x) {
+      for (var k = 0; k < ops.length; k++) {
+        var o = ops[k];
+        if (o.lo !== undefined) {
+          if (o.loInc ? !(x >= o.lo) : !(x > o.lo)) return false;
+        }
+        if (o.hi !== undefined) {
+          if (o.hiInc ? !(x <= o.hi) : !(x < o.hi)) return false;
+        }
+        if (o.not !== undefined && Math.abs(x - o.not) < 1e-12) return false;
+      }
+      return true;
+    };
+    return { fn: fn, text: t };
+  }
+
   function sampleExplicit(f) {
     var segs = [], cur = [], prevSy = null, limit = H * 3;
     var stepX = 1;      // 每一列都采样：点哪就是哪，不会因为采样间隔跳一格
     for (var sx = 0; sx <= W; sx += stepX) {
       var wx = toWorldX(sx);
       var wy;
+      if (f.domFn && !f.domFn(wx)) { if (cur.length > 1) segs.push(cur); cur = []; prevSy = null; continue; }
       try { wy = f.fn(wx, 0, 0); } catch (e) { wy = NaN; }
       if (!isFinite(wy)) { if (cur.length > 1) segs.push(cur); cur = []; prevSy = null; continue; }
       var sy = toScreenY(wy);
@@ -880,18 +952,20 @@
     if (!bar || !ex || !info) return;
     var activeInput = null;
 
+    // 键盘高度：adoptResize 之后 innerHeight 已经是"键盘上方高度"，
+    // 所以这里两种情况下都能算出正确的底部偏移。
     function kbHeight() {
       var vv = window.visualViewport;
       if (!vv) return 0;
       var h = window.innerHeight - (vv.height + vv.offsetTop);
-      return h > 80 ? h : 0;      // 小于 80px 不算键盘
+      return h > 60 ? h : 0;
     }
 
     function place() {
-      var h = kbHeight();
-      if (!activeInput || h <= 0) { bar.classList.remove('on'); return; }
+      if (!activeInput) { bar.classList.remove('on'); return; }
       bar.classList.add('on');
-      bar.style.bottom = h + 'px';
+      // 有键盘 → 抬到键盘上方；没有键盘（窗口已被压缩）→ 贴底部即键盘上方
+      bar.style.bottom = Math.max(0, kbHeight()) + 'px';
     }
 
     function refresh() {
@@ -924,6 +998,8 @@
     function bind(input) {
       input.addEventListener('focus', function () {
         activeInput = input;
+        bar.classList.add('on');
+        place();
         var f = state.funcs.filter(function (q) { return q._input === input; })[0];
         if (f) f._input = input;
         // 让输入框本身也尽量露出来
@@ -1064,24 +1140,60 @@
           return;
         }
         try {
-          var v = f.fn(f.evalX, 0, 0);
-          f.evalY = isFinite(v) ? v : null;
-          ylab.textContent = 'y=' + (f.evalY === null ? '—' : fmt(f.evalY, 0.001));
+          if (!isFinite(f.evalX)) {
+            // x → ±∞：逐步放大取极限，稳定才算收敛
+            var sgn = f.evalX > 0 ? 1 : -1, last = NaN, stable = true;
+            var mags = [1e2, 1e3, 1e4, 1e5, 1e6, 1e7];
+            for (var mi = 0; mi < mags.length; mi++) {
+              var vv = f.fn(sgn * mags[mi], 0, 0);
+              if (!isFinite(vv)) { stable = false; last = vv; break; }
+              if (mi > 0 && Math.abs(vv - last) > 1e-3 * Math.max(1, Math.abs(vv))) stable = false;
+              last = vv;
+            }
+            f.evalY = isFinite(last) ? last : null;
+            f.evalInf = true;
+            ylab.textContent = !isFinite(last) ? 'y→∞'
+              : 'y→' + fmtStable(last) + (stable ? '' : '?');
+          } else {
+            var v = f.fn(f.evalX, 0, 0);
+            f.evalInf = false;
+            f.evalY = isFinite(v) ? v : null;
+            ylab.textContent = 'y=' + (f.evalY === null ? '—' : fmt(f.evalY, 0.001));
+          }
         } catch (e) {
           f.evalY = null;
+          f.evalInf = false;
           ylab.textContent = 'y=—';
         }
       }
       xin.addEventListener('input', function () {
-        var v = parseFloat(xin.value);
-        if (isNaN(v) || f.mode !== 'y') { f.evalX = null; f.evalY = null; }
-        else { f.evalX = v; }
+        var raw = String(xin.value).trim().toLowerCase()
+          .replace(/\s+/g, '').replace(/infinity|inf|无穷/g, '∞');
+        var v;
+        if (raw === '∞' || raw === '+∞') v = Infinity;
+        else if (raw === '-∞' || raw === '−∞') v = -Infinity;
+        else v = parseFloat(raw);
+        if ((isNaN(v) && v !== Infinity && v !== -Infinity) || f.mode !== 'y') {
+          f.evalX = null; f.evalY = null;
+        } else { f.evalX = v; }
         refreshY();
         draw(); save();
       });
       refreshY();
+      // 定义域：在 y 输出后面
+      var din = document.createElement('input');
+      din.className = 'dv';
+      din.type = 'text';
+      din.placeholder = '定义域';
+      din.value = f.domain || '';
+      din.title = '例：x>0、0<x<5、x!=1，留空表示全体实数';
+      din.addEventListener('input', function () {
+        f.domain = din.value.trim();
+        applyDomain(f);
+        draw(); save();
+      });
       row.appendChild(dot); row.appendChild(mode); row.appendChild(input);
-      row.appendChild(xin); row.appendChild(ylab);
+      row.appendChild(xin); row.appendChild(ylab); row.appendChild(din);
       row.appendChild(del);
       var err = document.createElement('div');
       err.className = 'errmsg';
