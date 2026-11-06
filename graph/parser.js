@@ -35,6 +35,21 @@
     frac: function (v) { return v - Math.trunc(v); },
     gamma: function (v) { return gammaFn(v); }
   };
+  // 反三角函数别名：arcsin / arccos / arctan …（数学课本写法）
+  var ALIAS = {
+    arcsin: 'asin', arccos: 'acos', arctan: 'atan',
+    arccot: 'acot', arcsec: 'asec', arccsc: 'acsc',
+    arcsinh: 'asinh', arccosh: 'acosh', arctanh: 'atanh',
+    arsinh: 'asinh', arcosh: 'acosh', artanh: 'atanh',
+    asinh: 'asinh',
+    cosec: 'csc', cosech: 'csch', sech: 'sech',
+    atan2: 'atan2'
+  };
+  FN1.acot = function (v) { return Math.atan(1 / v); };
+  FN1.asec = function (v) { return Math.acos(1 / v); };
+  FN1.acsc = function (v) { return Math.asin(1 / v); };
+  FN1.sech = function (v) { return 1 / Math.cosh(v); };
+  FN1.csch = function (v) { return 1 / Math.sinh(v); };
   var FN2 = {
     min: Math.min, max: Math.max, pow: Math.pow,
     mod: function (a, b) { return a - b * Math.floor(a / b); },
@@ -42,6 +57,12 @@
     logb: function (a, b) { return Math.log(b) / Math.log(a); },
     root: function (a, b) { return b < 0 && Math.abs(a % 2) === 1 ? -Math.pow(-b, 1 / a) : Math.pow(b, 1 / a); }
   };
+
+  for (var _k in ALIAS) {
+    if (FN1[ALIAS[_k]]) FN1[_k] = FN1[ALIAS[_k]];
+    else if (FN2[ALIAS[_k]]) FN2[_k] = FN2[ALIAS[_k]];
+  }
+
 
   // Lanczos 近似的 Γ 函数（够画图用）
   var G = [676.5203681218851, -1259.1392167224028, 771.32342877765313,
