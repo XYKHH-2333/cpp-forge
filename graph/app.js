@@ -605,7 +605,10 @@
     for (var sx = 0; sx <= W; sx += stepX) {
       var wx = toWorldX(sx);
       var wy;
-      if (f.domFn && !f.domFn(wx)) { if (cur.length > 1) segs.push(cur); cur = []; prevSy = null; continue; }
+      if ((f.domLo !== null && f.domLo !== undefined && wx < f.domLo) ||
+          (f.domHi !== null && f.domHi !== undefined && wx > f.domHi)) {
+        if (cur.length > 1) segs.push(cur); cur = []; prevSy = null; continue;
+      }
       try { wy = f.fn(wx, 0, 0); } catch (e) { wy = NaN; }
       if (!isFinite(wy)) { if (cur.length > 1) segs.push(cur); cur = []; prevSy = null; continue; }
       var sy = toScreenY(wy);
@@ -962,10 +965,17 @@
     }
 
     function place() {
-      if (!activeInput) { bar.classList.remove('on'); return; }
+      if (!activeInput) {
+        bar.classList.remove('on');
+        document.body.style.paddingBottom = '';
+        return;
+      }
+      var h = kbHeight();
       bar.classList.add('on');
-      // 有键盘 → 抬到键盘上方；没有键盘（窗口已被压缩）→ 贴底部即键盘上方
-      bar.style.bottom = Math.max(0, kbHeight()) + 'px';
+      bar.style.bottom = Math.max(0, h) + 'px';
+      // 关键：如果窗口没给键盘让位（edge-to-edge 机型常见），
+      // 就给页面底部补一段空白，输入框才滚得上来、预览条才看得见
+      document.body.style.paddingBottom = h > 0 ? (h + 8) + 'px' : '';
     }
 
     function refresh() {
@@ -1011,7 +1021,10 @@
       });
       input.addEventListener('blur', function () {
         setTimeout(function () {
-          if (document.activeElement !== input) { bar.classList.remove('on'); }
+          if (document.activeElement !== input) {
+            bar.classList.remove('on');
+            document.body.style.paddingBottom = '';
+          }
         }, 150);
       });
       input.addEventListener('input', refresh);
@@ -1180,20 +1193,39 @@
         draw(); save();
       });
       refreshY();
-      // 定义域：在 y 输出后面
-      var din = document.createElement('input');
-      din.className = 'dv';
-      din.type = 'text';
-      din.placeholder = '定义域';
-      din.value = f.domain || '';
-      din.title = '例：x>0、0<x<5、x!=1，留空表示全体实数';
-      din.addEventListener('input', function () {
-        f.domain = din.value.trim();
-        applyDomain(f);
+      // 定义域：两个格子，分别填起始值和终止值（留空 = 不限制）
+      var dlo = document.createElement('input');
+      dlo.className = 'dv';
+      dlo.type = 'text';
+      dlo.placeholder = '起';
+      dlo.value = (f.domLo === undefined || f.domLo === null) ? '' : String(f.domLo);
+      var dhi = document.createElement('input');
+      dhi.className = 'dv';
+      dhi.type = 'text';
+      dhi.placeholder = '止';
+      dhi.value = (f.domHi === undefined || f.domHi === null) ? '' : String(f.domHi);
+
+      function numOf(txt, def) {
+        var t = String(txt).trim().toLowerCase().replace(/\s+/g, '').replace(/infinity|inf|无穷/g, '∞');
+        if (t === '') return null;
+        if (t === '∞' || t === '+∞') return Infinity;
+        if (t === '-∞' || t === '−∞') return -Infinity;
+        var v = parseFloat(t);
+        return isNaN(v) ? def : v;
+      }
+      function onDom() {
+        f.domLo = numOf(dlo.value, null);
+        f.domHi = numOf(dhi.value, null);
+        if (f.domLo !== null && f.domHi !== null && f.domLo > f.domHi) {
+          var t2 = f.domLo; f.domLo = f.domHi; f.domHi = t2;
+        }
         draw(); save();
-      });
+      }
+      dlo.addEventListener('input', onDom);
+      dhi.addEventListener('input', onDom);
       row.appendChild(dot); row.appendChild(mode); row.appendChild(input);
-      row.appendChild(xin); row.appendChild(ylab); row.appendChild(din);
+      row.appendChild(xin); row.appendChild(ylab);
+      row.appendChild(dlo); row.appendChild(dhi);
       row.appendChild(del);
       var err = document.createElement('div');
       err.className = 'errmsg';
