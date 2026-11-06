@@ -187,6 +187,22 @@
     font:11.5px ui-monospace,Menlo,monospace;outline:none;
   }
   .dv:focus{color:var(--fg);border-color:var(--accent)}
+
+  /* 函数行拆成两行：表达式一行，取值/定义域一行 */
+  .fmain{display:flex;align-items:center;gap:6px;width:100%}
+  .fmain .fx{flex:1;min-width:0}
+  .fvals{display:flex;align-items:center;gap:6px;width:100%;margin-top:7px;padding-left:26px}
+  .vbox{
+    flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);
+    color:var(--fg);border-radius:8px;padding:7px 4px;text-align:center;
+    font:12px ui-monospace,Menlo,monospace;outline:none;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .vbox::placeholder{color:var(--dim);font-size:11.5px}
+  .vbox:focus{border-color:var(--accent)}
+  .vbox.out{color:var(--accent);font-weight:600;display:flex;align-items:center;justify-content:center}
+  .vbox.dom{color:var(--dim);font-size:11.5px}
+  .vbox.dom:focus{color:var(--fg)}
 </style>
 </head>
 <body>
