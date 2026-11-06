@@ -55,6 +55,58 @@
     return Math.sqrt(2 * Math.PI) * Math.pow(t, z + 0.5) * Math.exp(-t) * a;
   }
 
+  // ── 输入归一化：把手机键盘打出来的数学符号翻译成表达式 ─────────────
+  // ²³⁴… → ^2 ^3；√ → sqrt；∧ → ^；× → *；π → pi；全角符号 → 半角……
+  var SUP = { '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9' };
+
+  function normalize(raw) {
+    var s = String(raw == null ? '' : raw);
+
+    // 1) 全角 → 半角（中文键盘经常打出全角括号和加减号）
+    s = s.replace(/[\uFF01-\uFF5E]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+    });
+    s = s.replace(/\u3000/g, ' ');
+
+    // 2) 各种"减号"统一成 -
+    s = s.replace(/[\u2212\u2013\u2014\u2015\uFE63\uFF0D]/g, '-');
+
+    // 3) 上标数字 → 幂：x² → x^2，sin²x 之类按 (sin(x))^2 处理
+    s = s.replace(/([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, function (m) {
+      var n = m.split('').map(function (c) { return SUP[c]; }).join('');
+      return '^' + n;
+    });
+
+    // 4) 运算符别名
+    s = s.replace(/[∧^]{1}/g, '^');            // ∧ 也表示乘方
+    s = s.replace(/[×·⋅∙∗]/g, '*');
+    s = s.replace(/[÷∕]/g, '/');
+    s = s.replace(/[−–—]/g, '-');
+    s = s.replace(/[∣丨]/g, '|');
+
+    // 5) 常量与根号
+    s = s.replace(/π/g, 'pi');
+    s = s.replace(/∞/g, 'Infinity');
+    s = s.replace(/∛/g, 'cbrt');
+    s = s.replace(/∜/g, 'sqrtsqrt');            // 极少见，兜底
+    s = s.replace(/√/g, 'sqrt');
+
+    // 6) 根号后面没括号就补一个：√x → sqrt(x)，√2x → sqrt(2x)
+    s = s.replace(/\b(sqrt|cbrt)\s*(?!\()([a-zA-Z0-9_.]+)/g, function (m, fn, arg) {
+      return fn + '(' + arg + ')';
+    });
+
+    // 7) sin²(x) → (sin(x))^2 ：函数名后的幂要作用在整个函数值上
+    s = fixFnPow(s);
+
+    // 8) 中文标点
+    s = s.replace(/[，、]/g, ',');
+    s = s.replace(/[（]/g, '(').replace(/[）]/g, ')');
+    s = s.replace(/[：]/g, ':');
+
+    return s;
+  }
+
   function tokenize(src) {
     var s = String(src).replace(/θ/g, ' th ');
     var out = [], i = 0, n = s.length;
@@ -86,7 +138,41 @@
     return out;
   }
 
-  function parse(src) {
+  // sin^2(x) / sin^2 x → (sin(x))^2
+  var FN_NAMES = 'sin|cos|tan|cot|sec|csc|asin|acos|atan|sinh|cosh|tanh|ln|lg|log|log2|log10|exp|sqrt|cbrt|abs|sign';
+
+  function fixFnPow(str) {
+    var re = new RegExp('\\b(' + FN_NAMES + ')\\s*\\^\\s*([0-9]+)\\s*(\\(|[a-zA-Zπ]|[0-9.]|$)', 'g');
+    var out = '', last = 0, m;
+    while ((m = re.exec(str)) !== null) {
+      var fn = m[1], exp = m[2];
+      var open = str.indexOf('(', m.index);
+      var inner = null, end = -1;
+      if (open === m.index + m[0].length - 1) {
+        // 后面直接跟括号：找到配对的右括号
+        var depth = 0;
+        for (var i = open; i < str.length; i++) {
+          if (str[i] === '(') depth++;
+          else if (str[i] === ')') { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end > 0) inner = str.slice(open + 1, end);
+      }
+      if (inner === null) {
+        // 没括号：吃后面一个"项"（变量 / 数字 / 常量）
+        var mt = /^\s*([a-zA-Zπ]+|[0-9.]+)/.exec(str.slice(m.index + m[0].length - 1));
+        if (!mt) continue;
+        inner = mt[1];
+        end = (m.index + m[0].length - 1) + (mt.index + mt[0].length) - 1;
+      }
+      out += str.slice(last, m.index) + '(' + fn + '(' + inner + '))^' + exp;
+      last = end + 1;
+      re.lastIndex = end + 1;
+    }
+    return out + str.slice(last);
+  }
+
+  function parse(_src) {
+    var src = normalize(_src);
     var tk = tokenize(src), p = 0;
     function peek() { return tk[p]; }
     function eat(t) {
@@ -207,6 +293,7 @@
     parse: parse,
     compile: compile,
     compileString: function (src) { return compile(parse(src)); },
+    normalize: normalize,
     FN1: FN1, FN2: FN2
   };
 })(typeof window !== 'undefined' ? window : globalThis);
