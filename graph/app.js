@@ -63,6 +63,9 @@
     f.error = '';
     f.fn = null;
     f.fn2 = null;
+    try {
+      f.normalized = P.normalize ? P.normalize(f.text) : f.text;
+    } catch (e2) { f.normalized = f.text; }
     if (!f.text.trim()) return;
     try {
       if (f.mode === 'param') {
@@ -868,6 +871,89 @@
     if (f) tip.style.borderColor = f.color;
   }
   function hideTip() { tip.style.display = 'none'; marker = null; drawMarker(); }
+  // ── 键盘上方的实时预览 ─────────────────────────────────────
+  // 手机上键盘会盖住输入框，这里把"正在输入的表达式 + 求值结果"顶到键盘上方。
+  (function keyboardPreview() {
+    var bar = document.getElementById('kbBar');
+    var ex = document.getElementById('kbExpr');
+    var info = document.getElementById('kbInfo');
+    if (!bar || !ex || !info) return;
+    var activeInput = null;
+
+    function kbHeight() {
+      var vv = window.visualViewport;
+      if (!vv) return 0;
+      var h = window.innerHeight - (vv.height + vv.offsetTop);
+      return h > 80 ? h : 0;      // 小于 80px 不算键盘
+    }
+
+    function place() {
+      var h = kbHeight();
+      if (!activeInput || h <= 0) { bar.classList.remove('on'); return; }
+      bar.classList.add('on');
+      bar.style.bottom = h + 'px';
+    }
+
+    function refresh() {
+      if (!activeInput) return;
+      var f = state.funcs.filter(function (q) { return q._input === activeInput; })[0];
+      var txt = activeInput.value || '';
+      ex.innerHTML = '';
+      var span = document.createElement('span');
+      span.textContent = txt || '（在这里输入表达式）';
+      ex.appendChild(span);
+      var caret = document.createElement('span');
+      caret.className = 'caret';
+      ex.appendChild(caret);
+      ex.scrollLeft = ex.scrollWidth;
+
+      if (f) {
+        if (f.error) { info.innerHTML = '⚠️ ' + f.error; return; }
+        var parts = [];
+        var sel = document.activeElement;
+        if (sel && sel.classList && sel.classList.contains('xv') && f.evalY !== null && f.evalY !== undefined) {
+          parts.push('x = ' + f.evalX + ' → <b>y = ' + fmt(f.evalY, 0.001) + '</b>');
+        }
+        parts.push('识别为：<b>' + (f.normalized || f.text) + '</b>');
+        info.innerHTML = parts.join('　');
+      } else {
+        info.textContent = '';
+      }
+    }
+
+    function bind(input) {
+      input.addEventListener('focus', function () {
+        activeInput = input;
+        var f = state.funcs.filter(function (q) { return q._input === input; })[0];
+        if (f) f._input = input;
+        // 让输入框本身也尽量露出来
+        setTimeout(function () {
+          try { input.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { }
+          place(); refresh();
+        }, 120);
+        setTimeout(function () { place(); refresh(); }, 350);
+      });
+      input.addEventListener('blur', function () {
+        setTimeout(function () {
+          if (document.activeElement !== input) { bar.classList.remove('on'); }
+        }, 150);
+      });
+      input.addEventListener('input', refresh);
+      input.addEventListener('click', refresh);
+    }
+
+    state.funcs.forEach(function (f) { if (f._input) bind(f._input); });
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', function () { place(); });
+      window.visualViewport.addEventListener('scroll', function () { place(); });
+    }
+    window.addEventListener('resize', function () { place(); });
+
+    // 供 renderList 绑定新输入框
+    window.__bindKbPreview = function (input, f) { f._input = input; bind(input); };
+  })();
+
   function clearMarker() { if (marker) { marker = null; tip.style.display = 'none'; drawMarker(); } }
 
   // 滚轮缩放（电脑上）
@@ -943,6 +1029,7 @@
       input.value = f.text;
       input.placeholder = f.mode === 'implicit' ? '例：x^2+y^2-25'
         : f.mode === 'polar' ? '例：1-cos(θ)' : f.mode === 'param' ? '例：cos(3t); sin(2t)' : '例：sin(x)/x';
+      if (window.__bindKbPreview) window.__bindKbPreview(input, f);
       input.addEventListener('input', function () {
         f.text = input.value;
         compileFunc(f);
