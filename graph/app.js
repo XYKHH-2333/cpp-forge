@@ -1139,17 +1139,18 @@
 
       // 解析式右边：输入 x → 立刻给出 y，并在图上标出这个点
       var xin = document.createElement('input');
-      xin.className = 'xv';
-      xin.type = 'number';
-      xin.step = 'any';
-      xin.placeholder = 'x';
+      xin.className = 'vbox';
+      xin.type = 'text';
+      xin.inputMode = 'decimal';
+      xin.placeholder = '输入x';
       if (f.evalX !== null && f.evalX !== undefined) xin.value = f.evalX;
-      var ylab = document.createElement('span');
-      ylab.className = 'yv';
+      var ylab = document.createElement('div');
+      ylab.className = 'vbox out';
+      ylab.textContent = '输出y';
       function refreshY() {
         if (f.evalX === null || f.evalX === undefined || !f.fn || f.mode !== 'y') {
           f.evalY = null;
-          ylab.textContent = 'y=—';
+          ylab.textContent = '输出y';
           return;
         }
         try {
@@ -1165,18 +1166,18 @@
             }
             f.evalY = isFinite(last) ? last : null;
             f.evalInf = true;
-            ylab.textContent = !isFinite(last) ? 'y→∞'
-              : 'y→' + fmtStable(last) + (stable ? '' : '?');
+            ylab.textContent = !isFinite(last) ? '→∞'
+              : '→' + fmtStable(last) + (stable ? '' : '?');
           } else {
             var v = f.fn(f.evalX, 0, 0);
             f.evalInf = false;
             f.evalY = isFinite(v) ? v : null;
-            ylab.textContent = 'y=' + (f.evalY === null ? '—' : fmt(f.evalY, 0.001));
+            ylab.textContent = (f.evalY === null) ? '输出y' : fmtStable(f.evalY);
           }
         } catch (e) {
           f.evalY = null;
           f.evalInf = false;
-          ylab.textContent = 'y=—';
+          ylab.textContent = '输出y';
         }
       }
       xin.addEventListener('input', function () {
@@ -1195,14 +1196,14 @@
       refreshY();
       // 定义域：两个格子，分别填起始值和终止值（留空 = 不限制）
       var dlo = document.createElement('input');
-      dlo.className = 'dv';
+      dlo.className = 'vbox dom';
       dlo.type = 'text';
-      dlo.placeholder = '起';
+      dlo.placeholder = '左端点';
       dlo.value = (f.domLo === undefined || f.domLo === null) ? '' : String(f.domLo);
       var dhi = document.createElement('input');
-      dhi.className = 'dv';
+      dhi.className = 'vbox dom';
       dhi.type = 'text';
-      dhi.placeholder = '止';
+      dhi.placeholder = '右端点';
       dhi.value = (f.domHi === undefined || f.domHi === null) ? '' : String(f.domHi);
 
       function numOf(txt, def) {
@@ -1223,10 +1224,16 @@
       }
       dlo.addEventListener('input', onDom);
       dhi.addEventListener('input', onDom);
-      row.appendChild(dot); row.appendChild(mode); row.appendChild(input);
-      row.appendChild(xin); row.appendChild(ylab);
-      row.appendChild(dlo); row.appendChild(dhi);
-      row.appendChild(del);
+      var main = document.createElement('div');
+      main.className = 'fmain';
+      main.appendChild(dot); main.appendChild(mode); main.appendChild(input); main.appendChild(del);
+
+      var vals = document.createElement('div');
+      vals.className = 'fvals';
+      vals.appendChild(xin); vals.appendChild(ylab);
+      vals.appendChild(dlo); vals.appendChild(dhi);
+
+      row.appendChild(main); row.appendChild(vals);
       var err = document.createElement('div');
       err.className = 'errmsg';
       err.textContent = f.error || '';
