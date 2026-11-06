@@ -316,8 +316,133 @@
       strokePath(pts, f.color);
     }
 
+    drawIntersections(C);   // 多条曲线的交点
     drawEvalPoints(C);      // "输入 x 求 y" 的标记点
     drawMarker();
+  }
+
+  // 多条曲线的交点：扫描符号变化 + 二分细化
+  function computeIntersections() {
+    var ys = [];
+    for (var i = 0; i < state.funcs.length; i++) {
+      var f = state.funcs[i];
+      if (!f.visible || f.error || !f.fn || f.mode !== 'y') continue;
+      ys.push(f);
+    }
+    var out = [];
+    if (ys.length < 2) return out;
+
+    function val(f, x) {
+      try { var v = f.fn(x, 0, 0); return isFinite(v) ? v : NaN; } catch (e) { return NaN; }
+    }
+    // 屏幕像素步长：每 3px 采一次，足够找到所有交点
+    var stepX = 3;
+    for (var a = 0; a < ys.length; a++) {
+      for (var b = a + 1; b < ys.length; b++) {
+        var f1 = ys[a], f2 = ys[b];
+        var prevX = null, prevD = NaN;
+        var prevAbs = NaN, prev2Abs = NaN, prev2X = NaN;
+        for (var sx = 0; sx <= W; sx += stepX) {
+          var wx = toWorldX(sx);
+          var v1 = val(f1, wx), v2 = val(f2, wx);
+          if (!isFinite(v1) || !isFinite(v2)) {
+            prevX = null; prevD = NaN; prevAbs = NaN; prev2Abs = NaN; continue;
+          }
+          var dv = v1 - v2;
+          var absD = Math.abs(dv) * state.view.ppu;      // 屏幕像素上的差值
+          // 相切（重根）检测：|差值| 先降后升，且极小值足够小
+          if (isFinite(prev2Abs) && isFinite(prevAbs)
+              && prevAbs <= prev2Abs && prevAbs <= absD && prevAbs < 1.5) {
+            // 用三分法把切点位置再逼近一下（相切时差值最小处才是真正交点）
+            var lo3 = prev2X, hi3 = wx;
+            for (var it3 = 0; it3 < 30; it3++) {
+              var m1 = lo3 + (hi3 - lo3) / 3, m2 = hi3 - (hi3 - lo3) / 3;
+              var d1 = Math.abs(val(f1, m1) - val(f2, m1));
+              var d2 = Math.abs(val(f1, m2) - val(f2, m2));
+              if (!isFinite(d1) || !isFinite(d2)) break;
+              if (d1 < d2) hi3 = m2; else lo3 = m1;
+            }
+            var tx3 = (lo3 + hi3) / 2;
+            var iy2 = val(f1, tx3);
+            prevX = tx3;
+            if (isFinite(iy2)) {
+              var dup2 = false;
+              for (var k2 = 0; k2 < out.length; k2++) {
+                if (Math.abs(out[k2].x - prevX) * state.view.ppu < 3) { dup2 = true; break; }
+              }
+              if (!dup2 && out.length < 40) out.push({ x: prevX, y: iy2, c: f1.color });
+            }
+          }
+          prev2Abs = prevAbs; prev2X = prevX;
+          prevAbs = absD;
+          if (prevX !== null && isFinite(prevD) && prevD * dv <= 0 && Math.abs(prevD - dv) < 1e6) {
+            // 二分细化到 1e-6 精度
+            var lo = prevX, hi = wx, flo = prevD;
+            for (var it = 0; it < 40; it++) {
+              var mid = (lo + hi) / 2;
+              var fm = val(f1, mid) - val(f2, mid);
+              if (!isFinite(fm)) break;
+              if (flo * fm <= 0) { hi = mid; } else { lo = mid; flo = fm; }
+            }
+            var ix = (lo + hi) / 2;
+            var iy = val(f1, ix);
+            if (isFinite(iy)) {
+              // 去重（同一点可能被相邻区间重复找到）
+              var dup = false;
+              for (var k = 0; k < out.length; k++) {
+                if (Math.abs(out[k].x - ix) * state.view.ppu < 3 &&
+                    Math.abs(out[k].y - iy) * state.view.ppu < 3) { dup = true; break; }
+              }
+              if (!dup && out.length < 40) out.push({ x: ix, y: iy, c: f1.color });
+            }
+          }
+          prevX = wx; prevD = dv;
+        }
+      }
+    }
+    return out;
+  }
+
+  function drawIntersections(C) {
+    var pts = computeIntersections();
+    if (!pts.length) return;
+    var step = niceStep(86 / state.view.ppu);
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      var sx = toScreenX(p.x), sy = toScreenY(p.y);
+      if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) continue;
+      ctx.save();
+      // 空心菱形，和函数颜色区分开
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - 6); ctx.lineTo(sx + 6, sy);
+      ctx.lineTo(sx, sy + 6); ctx.lineTo(sx - 6, sy);
+      ctx.closePath();
+      ctx.fillStyle = C.bg;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 0xFFFFFFFF;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = 0xFFFFFFFF;
+      ctx.fill();
+
+      var txt = '(' + fmt(p.x, step * 0.01) + ', ' + fmt(p.y, step * 0.01) + ')';
+      ctx.font = '600 10.5px ui-monospace,SFMono-Regular,Menlo,monospace';
+      var tw = ctx.measureText(txt).width;
+      var lx = sx + 9, ly = sy + 14;
+      if (lx + tw > W - 4) lx = sx - tw - 9;
+      if (ly > H - 6) ly = sy - 14;
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(lx - 3, ly - 9, tw + 6, 13);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = C.axis;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, lx, ly - 2);
+      ctx.restore();
+    }
   }
 
   // 每个函数"输入 x 求 y"后在图上的标记点 + 坐标标签
@@ -678,8 +803,17 @@
   }
 
   // 点击取点：找最近的曲线点
+  // 命中半径：屏幕像素恒定，但缩放越大收得越紧（放大后才能"点哪是哪"）
+  function hitRadiusPx() {
+    var base = 18, minR = 6, ref = 42;      // ref = 默认缩放（每单位 42 像素）
+    var k = Math.max(0, Math.log(state.view.ppu / ref) / Math.log(8));  // 放大 8 倍 → 1
+    var r = base - (base - minR) * Math.min(1, k);
+    return Math.max(minR, Math.min(base, r));
+  }
+
   function pick(sx, sy) {
-    var best = null, bestD = 22 * 22;      // 命中半径缩小：不再"老远就吸过去"
+    var R = hitRadiusPx();
+    var best = null, bestD = R * R;      // 命中半径随缩放变化
     for (var i = 0; i < lastPaths.length; i++) {
       var item = lastPaths[i];
       var f = item.f;
@@ -707,7 +841,7 @@
       }
     }
     if (!best) {
-      // 没点到曲线就显示该位置的世界坐标
+      // 没点到曲线（超出当前缩放的命中半径）就显示该位置的世界坐标
       marker = { sx: sx, sy: sy, wx: toWorldX(sx), wy: toWorldY(sy), color: null };
       showTip(sx, sy, toWorldX(sx), toWorldY(sy), null);
       draw();
@@ -982,6 +1116,7 @@
   // 暴露给自动化测试
   window.__graph = {
     state: state, draw: draw, pick: pick, addFunc: addFunc,
+    intersections: computeIntersections, hitRadiusPx: hitRadiusPx,
     toWorldX: toWorldX, toWorldY: toWorldY, toScreenX: toScreenX, toScreenY: toScreenY,
     // 供自动化测试：模拟"按住曲线 → 沿曲线拖动"的完整流程
     paths: function () { return lastPaths; },
