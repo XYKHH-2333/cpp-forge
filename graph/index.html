@@ -169,6 +169,24 @@
     margin-top:3px;font:12px ui-monospace,Menlo,monospace;color:var(--dim);
   }
   #kbBar .kbInfo b{color:var(--accent);font-weight:600}
+
+  /* 解析式右侧的小输入框：x 值、y 输出、定义域 */
+  .xv{
+    flex:0 0 58px;width:58px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--fg);border-radius:8px;padding:7px 4px;text-align:center;
+    font:12.5px ui-monospace,Menlo,monospace;outline:none;
+  }
+  .xv:focus{border-color:var(--accent)}
+  .yv{
+    flex:0 0 auto;min-width:56px;font:600 12px ui-monospace,Menlo,monospace;
+    color:var(--accent);text-align:left;white-space:nowrap;
+  }
+  .dv{
+    flex:0 0 74px;width:74px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--dim);border-radius:8px;padding:7px 5px;text-align:center;
+    font:11.5px ui-monospace,Menlo,monospace;outline:none;
+  }
+  .dv:focus{color:var(--fg);border-color:var(--accent)}
 </style>
 </head>
 <body>
